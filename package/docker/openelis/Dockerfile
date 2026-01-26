@@ -38,7 +38,7 @@ RUN chmod +x wait-for.sh
 
 COPY OpenElis.zip /tmp/artifacts/
 RUN unzip -d /tmp/artifacts/ /tmp/artifacts/OpenElis.zip
-RUN cp -r /tmp/artifacts/OpenElis/db_backup/. /opt/bahmni-lab/migrations/db_backup/
+RUN cp -r /tmp/artifacts/*/db_backup/. /opt/bahmni-lab/migrations/db_backup/
 RUN cp -r /tmp/artifacts/OpenElis/liquibase/. /opt/bahmni-lab/migrations/liquibase/
 RUN cp -r /tmp/artifacts/OpenElis/scripts/. /opt/bahmni-lab/migrations/scripts/
 COPY package/resources/migrateDb.sh /opt/bahmni-lab/migrations/scripts/
