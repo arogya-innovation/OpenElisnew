@@ -72,6 +72,10 @@ public abstract class ConfigurationProperties {
 							 resultsResendTime,
 							 useLogoInReport,
 							 trackPatientPayment,
+							//  trackPatientPayment,
+							enablePaymentValidation,  // Add this line
+							paymentValidationApiUrl,  // Add this line
+							paymentValidationTimeout, // Add this line
 							 alertForInvalidResults,
 							 defaultLangLocale,
 							 defaultDateLocale,

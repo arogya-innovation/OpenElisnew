@@ -62,6 +62,85 @@
 	sampleId = request.getParameter("id");
 %>
 
+
+
+<!-- Payment Warning Modal -->
+<logic:equal name="<%=formName%>" property="paymentBlocked" value="true">
+    <div class="payment-warning-overlay" id="paymentWarningOverlay">
+        <div class="payment-warning-modal">
+            <div class="warning-header">
+                <span class="warning-icon">⚠️</span>
+                <h2>Payment Required</h2>
+            </div>
+            
+            <div class="payment-details">
+                <div class="detail-row">
+                    <strong>Status:</strong> 
+                    <span class="status-badge">
+                        <bean:write name="<%=formName%>" property="paymentStatus"/>
+                    </span>
+                </div>
+                <div class="detail-row message">
+                    <bean:write name="<%=formName%>" property="paymentMessage"/>
+                </div>
+            </div>
+            
+            <div class="warning-instructions">
+                <p>Sample collection cannot proceed until payment is verified.</p>
+                <p>Please complete payment at the billing counter before continuing.</p>
+            </div>
+            
+            <div class="warning-actions">
+                <button type="button" class="btn btn-primary" onclick="window.location.href='/billing'">
+                    Go to Billing
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="window.history.back()">
+                    Go Back
+                </button>
+            </div>
+        </div>
+    </div>
+</logic:equal>
+
+
+<!-- Disable form if payment blocked -->
+<logic:equal name="<%=formName%>" property="paymentBlocked" value="true">
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add class to body to disable all form elements
+            document.body.classList.add('payment-blocked-form');
+            
+            // Disable all form inputs
+            var formElements = document.querySelectorAll('input, select, textarea, button');
+            formElements.forEach(function(element) {
+                // Don't disable the warning modal buttons
+                if (!element.closest('.warning-actions')) {
+                    element.disabled = true;
+                    element.style.cursor = 'not-allowed';
+                }
+            });
+            
+            // Prevent form submission
+            var forms = document.querySelectorAll('form');
+            forms.forEach(function(form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    alert('Payment verification required before sample collection.');
+                    return false;
+                });
+            });
+        });
+    </script>
+</logic:equal>
+
+
+
+
+
+
+
+
+
 <script type="text/javascript" src="<%=basePath%>scripts/utilities.js?ver=<%= Versioning.getBuildNumber() %>" ></script>
 
 <link rel="stylesheet" href="css/jquery_ui/jquery.ui.all.css?ver=<%= Versioning.getBuildNumber() %>">

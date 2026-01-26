@@ -36,6 +36,8 @@ import us.mn.state.health.lims.samplesource.daoimpl.SampleSourceDAOImpl;
 import us.mn.state.health.lims.siteinformation.dao.SiteInformationDAO;
 import us.mn.state.health.lims.siteinformation.daoimpl.SiteInformationDAOImpl;
 import us.mn.state.health.lims.siteinformation.valueholder.SiteInformation;
+import us.mn.state.health.lims.payment.service.PaymentValidationService;
+import us.mn.state.health.lims.payment.service.PaymentValidationService.PaymentStatus;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -50,10 +52,12 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
 
     private SampleSourceDAO sampleSourceDAO;
     private ProviderDAO providerDAO;
+    private PaymentValidationService paymentValidationService;
 
 	public SamplePatientEntryAction() {
         this.sampleSourceDAO = new SampleSourceDAOImpl();
         this.providerDAO = new ProviderDAOImpl();
+        this.paymentValidationService = new PaymentValidationService();
     }
 
     protected ActionForward performAction(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response)
@@ -77,6 +81,9 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
 		boolean needRequesterList = FormFields.getInstance().useField(FormFields.Field.RequesterSiteList);
 		boolean needSampleInitialConditionList = FormFields.getInstance().useField(FormFields.Field.InitialSampleCondition);
 		boolean needPaymentOptions = ConfigurationProperties.getInstance().isPropertyValueEqual(Property.trackPatientPayment, "true");
+		
+		// Check if payment validation is enabled
+		boolean paymentValidationEnabled = ConfigurationProperties.getInstance().isPropertyValueEqual(Property.enablePaymentValidation, "true");
 
         SiteInformationDAO siteInfo = new SiteInformationDAOImpl();
         SiteInformation sampleEntryFieldsetOrder = siteInfo.getSiteInformationByName("SampleEntryFieldsetOrder");
@@ -86,7 +93,55 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             fieldsetOrder = sampleEntryFieldsetOrder.getValue().split("\\|");
         }
 
-
+		// ====== PAYMENT VALIDATION LOGIC ======
+		// Check if there's an order UUID in the request (coming from Bahmni)
+		String orderUuid = request.getParameter("orderUuid");
+		
+		// Alternative: Check if it's stored in session
+		if (orderUuid == null || orderUuid.isEmpty()) {
+		    orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
+		}
+		
+		// If payment validation is enabled and we have an order UUID
+		if (paymentValidationEnabled && orderUuid != null && !orderUuid.isEmpty()) {
+		    try {
+		        PaymentStatus paymentStatus = paymentValidationService.validatePayment(orderUuid);
+		        
+		        if (!paymentStatus.isAllowSample()) {
+		            // Payment not verified - set attributes to show warning
+		            request.setAttribute("paymentBlocked", true);
+		            request.setAttribute("paymentStatus", paymentStatus.getStatus());
+		            request.setAttribute("paymentMessage", paymentStatus.getMessage());
+		            request.setAttribute("orderUuid", orderUuid);
+		            
+		            // Also set in form for JSP access
+		            PropertyUtils.setProperty(dynaForm, "paymentBlocked", true);
+		            PropertyUtils.setProperty(dynaForm, "paymentStatus", paymentStatus.getStatus());
+		            PropertyUtils.setProperty(dynaForm, "paymentMessage", paymentStatus.getMessage());
+		            
+		            // Log the blocked attempt
+		            System.out.println("Sample collection blocked for order: " + orderUuid + 
+		                             " - Reason: " + paymentStatus.getMessage());
+		        } else {
+		            // Payment verified - allow sample collection
+		            request.setAttribute("paymentVerified", true);
+		            PropertyUtils.setProperty(dynaForm, "paymentVerified", true);
+		            
+		            System.out.println("Payment verified for order: " + orderUuid);
+		        }
+		    } catch (Exception e) {
+		        // Log the error
+		        System.err.println("Error validating payment for order: " + orderUuid);
+		        e.printStackTrace();
+		        
+		        // Decide behavior on error - currently blocking for safety
+		        request.setAttribute("paymentBlocked", true);
+		        request.setAttribute("paymentStatus", "error");
+		        request.setAttribute("paymentMessage", "Unable to verify payment status. Please contact billing.");
+		        PropertyUtils.setProperty(dynaForm, "paymentBlocked", true);
+		    }
+		}
+		// ====== END PAYMENT VALIDATION LOGIC ======
 
         PropertyUtils.setProperty(dynaForm, "receivedDateForDisplay", dateAsText);
 		PropertyUtils.setProperty(dynaForm, "requestDate", dateAsText);
@@ -115,6 +170,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
 		if (needPaymentOptions) {
 			setDictionaryList(dynaForm, "paymentOptions", "PP", true);
 		}
+		
 		return mapping.findForward(forward);
 	}
 
