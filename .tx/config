@@ -7,5 +7,5 @@ source_file            = openelis/src/MessageResources.properties
 source_lang            = en
 type                   = UNICODEPROPERTIES
 replace_edited_strings = false
-keep_translations      = false
+keep_translations      = false 
 
