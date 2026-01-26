@@ -4,24 +4,16 @@ on:
     branches:
       - master
       - 'release-*'
-  workflow_dispatch:    
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+
     paths-ignore:
       - '**.md'
-  workflow_run:
-    workflows: [Pull Translations from Transifex]
-    types: [completed]
-    branches:
-      - master
-      - 'release-*'
 
 jobs:
   docker-build-publish:
     name: Build & Publish OpenELIS Docker Image
     runs-on: ubuntu-latest
-    env:
-      HELM_CHART_PATH: package/helm/
     steps:
       - uses: actions/checkout@v2
       - name: Setup Java 7 for ant
@@ -34,7 +26,9 @@ jobs:
         with:
           ruby-version: 3.1
       - name: Install Compass
-        run: gem install ffi -v 1.17.0 && gem install compass
+        run: |
+          gem update --system
+          gem install compass
       - name: Install Ant 1.9
         run: |
           mkdir /tmp/ant
@@ -46,7 +40,7 @@ jobs:
       - name: Set env.ARTIFACT_VERSION
         run: |
           wget -q https://raw.githubusercontent.com/Bahmni/bahmni-infra-utils/main/setArtifactVersion.sh && chmod +x setArtifactVersion.sh
-          ./setArtifactVersion.sh
+          ./setArtifactVersion.sh || echo "ARTIFACT_VERSION=dev-$(date +%Y%m%d%H%M%S)" >> $GITHUB_ENV
           rm setArtifactVersion.sh
       - name: Package
         run: ant dist
@@ -66,46 +60,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           file: package/docker/openelis/Dockerfile
           push: true
-          tags: bahmni/openelis:${{env.ARTIFACT_VERSION}},bahmni/openelis:latest
-      - name: Push Translations to Transifex
-        run: |
-          curl -o transifex.sh https://raw.githubusercontent.com/Bahmni/bahmni-infra-utils/main/transifex.sh
-          chmod +x transifex.sh
-          ./transifex.sh push
-          rm transifex.sh
-        env:
-          TX_TOKEN: ${{ secrets.TX_TOKEN }}
-
-      - name: Update Version and Image Tag
-        run: |
-          yq --inplace '.image.tag = "${{ env.ARTIFACT_VERSION }}"' $HELM_CHART_PATH/values.yaml
-          yq --inplace '.version = "${{ env.ARTIFACT_VERSION }}"' $HELM_CHART_PATH/Chart.yaml
-      - name: Helm Lint
-        run: helm lint $HELM_CHART_PATH
-
-      - name: Helm Package
-        run: helm package $HELM_CHART_PATH
-
-      - name: Checkout Charts Repository
-        uses: actions/checkout@v2
-        with:
-          repository: Bahmni/helm-charts
-          ref: gh-pages
-          path: helm-charts
-          persist-credentials: false
-
-      - name: Copy Helm Archive
-        run: mkdir -p helm-charts/openelis/ && cp openelis-${{ env.ARTIFACT_VERSION }}.tgz helm-charts/openelis/
-
-      - name: Helm Index
-        working-directory: helm-charts/
-        run: helm repo index --merge index.yaml --url https://bahmni.github.io/helm-charts/  .
-
-      - name: Commit and Push Chart Repository
-        working-directory: helm-charts/
-        run: |
-          git config user.name ${{ secrets.BAHMNI_USERNAME}}
-          git config user.email ${{ secrets.BAHMNI_EMAIL}}
-          git add .
-          git commit -m "Release of openelis-${{ env.ARTIFACT_VERSION }}"
-          git push 'https://${{ secrets.BAHMNI_USERNAME}}:${{ secrets.BAHMNI_PAT}}@github.com/bahmni/helm-charts.git' gh-pages    
+          tags: anish443/openelis:${{env.ARTIFACT_VERSION}},anish443/openelis:latest
