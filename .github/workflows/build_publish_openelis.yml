@@ -4,16 +4,24 @@ on:
     branches:
       - master
       - 'release-*'
+  workflow_dispatch:    
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
-
     paths-ignore:
       - '**.md'
+  workflow_run:
+    workflows: [Pull Translations from Transifex]
+    types: [completed]
+    branches:
+      - master
+      - 'release-*'
 
 jobs:
   docker-build-publish:
     name: Build & Publish OpenELIS Docker Image
     runs-on: ubuntu-latest
+    env:
+      HELM_CHART_PATH: package/helm/
     steps:
       - uses: actions/checkout@v2
       - name: Setup Java 7 for ant
@@ -26,9 +34,7 @@ jobs:
         with:
           ruby-version: 3.1
       - name: Install Compass
-        run: |
-          gem update --system
-          gem install compass
+        run: gem install ffi -v 1.17.0 && gem install compass
       - name: Install Ant 1.9
         run: |
           mkdir /tmp/ant
@@ -40,7 +46,7 @@ jobs:
       - name: Set env.ARTIFACT_VERSION
         run: |
           wget -q https://raw.githubusercontent.com/Bahmni/bahmni-infra-utils/main/setArtifactVersion.sh && chmod +x setArtifactVersion.sh
-          ./setArtifactVersion.sh || echo "ARTIFACT_VERSION=dev-$(date +%Y%m%d%H%M%S)" >> $GITHUB_ENV
+          ./setArtifactVersion.sh
           rm setArtifactVersion.sh
       - name: Package
         run: ant dist
@@ -60,4 +66,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           file: package/docker/openelis/Dockerfile
           push: true
-          tags: anish443/openelis:${{env.ARTIFACT_VERSION}},anish443/openelis:latest
+          tags: anish443/openelis:latest,anish443/openelis:latest
