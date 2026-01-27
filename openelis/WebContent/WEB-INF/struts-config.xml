@@ -1277,6 +1277,8 @@
     <form-property name="status" type="java.lang.String" initial=""/>
     <form-property name="releasedDateForDisplay" type="java.lang.String" initial=""/>
     <form-property name="stickerReceivedFlag" type="java.lang.String" initial=""/>
+   <form-property name="uuid" type="java.lang.String"/>
+
     <!--removed per Christina 3/03/2006-->
     <!--form-property name="enteredBy" type="java.lang.String" initial=""/-->
     <form-property name="sysUserId" type="java.lang.String" initial=""/> 
