@@ -17,7 +17,7 @@ import java.net.URL;
 public class PaymentValidationService {
     
     // Default values if not configured in database
-    private static final String DEFAULT_ODOO_API_URL = "http://localhost:8069/lab/payment/status";
+    private static final String DEFAULT_ODOO_API_URL = "http://odoo:8069/lab/payment/status";
     private static final String DEFAULT_TIMEOUT = "10";
     private static final String DEFAULT_ENABLED = "true";
     
