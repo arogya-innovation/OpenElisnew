@@ -83,7 +83,26 @@ if (paymentValidationEnabledInfo != null && paymentValidationEnabledInfo.getValu
 
 // Check if there's an order UUID in the request (coming from Bahmni)
 // String orderUuid = request.getParameter("orderUuid");
-String orderUuid = "17fda241-a3f6-49b0-83c4-244afb485904"; // Your test UUID
+// String orderUuid = "17fda241-a3f6-49b0-83c4-244afb485904"; // Your test UUID
+
+
+
+// ====== Resolve OpenMRS Order UUID ======
+
+// Try request parameter first
+String orderUuid = request.getParameter("orderUuid");
+
+// If null, fallback to the form's sample UUID
+if (orderUuid == null || orderUuid.isEmpty()) {
+    // "uuid" property in dynaForm maps to sample.uuid
+    orderUuid = (String) PropertyUtils.getProperty(dynaForm, "uuid");
+}
+
+// Debug log
+System.out.println("Resolved OpenMRS Order UUID for payment check: " + orderUuid);
+
+
+
 System.out.println("===== PAYMENT VALIDATION CHECK =====");
 System.out.println("Order UUID from parameter: " + orderUuid);
 
