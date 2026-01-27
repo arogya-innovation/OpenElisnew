@@ -82,7 +82,8 @@ if (paymentValidationEnabledInfo != null && paymentValidationEnabledInfo.getValu
 }
 
 // Check if there's an order UUID in the request (coming from Bahmni)
-String orderUuid = request.getParameter("orderUuid");
+// String orderUuid = request.getParameter("orderUuid");
+String orderUuid = "6565e621-2183-45a1-9822-d98fb9aabb5d"; // Your test UUID
 System.out.println("===== PAYMENT VALIDATION CHECK =====");
 System.out.println("Order UUID from parameter: " + orderUuid);
 
