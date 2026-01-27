@@ -48,7 +48,8 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
     }
     
     /**
-     * Get order UUID from external_reference table using sample UUID
+     * Get order UUID from external_reference table using sample UUID,
+     * or from client_reference field in sample table
      */
     private String getOrderUuidFromSampleUuid(String sampleUuid) {
         if (sampleUuid == null || sampleUuid.isEmpty()) {
@@ -62,7 +63,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         try {
             conn = HibernateUtil.getSession().connection();
             
-            // Query external_reference table
+            // First try: Query external_reference table
             String sql = "SELECT external_id FROM clinlims.external_reference " +
                         "WHERE item_id = ? ORDER BY id DESC LIMIT 1";
             
@@ -73,10 +74,30 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             if (rs.next()) {
                 String orderUuid = rs.getString("external_id");
                 System.out.println("Found order UUID from external_reference: " + orderUuid);
-                return orderUuid;
+                if (orderUuid != null && !orderUuid.isEmpty()) {
+                    return orderUuid;
+                }
             }
+            
+            // Second try: Get from client_reference in sample table
+            if (rs != null) rs.close();
+            if (ps != null) ps.close();
+            
+            sql = "SELECT client_reference FROM clinlims.sample WHERE uuid = ?";
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, sampleUuid);
+            rs = ps.executeQuery();
+            
+            if (rs.next()) {
+                String orderUuid = rs.getString("client_reference");
+                System.out.println("Found order UUID from sample.client_reference: " + orderUuid);
+                if (orderUuid != null && !orderUuid.isEmpty()) {
+                    return orderUuid;
+                }
+            }
+            
         } catch (Exception e) {
-            System.err.println("Error querying external_reference: " + e.getMessage());
+            System.err.println("Error querying for order UUID: " + e.getMessage());
             e.printStackTrace();
         } finally {
             try {
@@ -88,6 +109,109 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             }
         }
         
+        return null;
+    }
+    
+    /**
+     * Get order UUID from accession number
+     */
+    private String getOrderUuidFromAccessionNumber(String accessionNumber) {
+        if (accessionNumber == null || accessionNumber.isEmpty()) {
+            return null;
+        }
+        
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = HibernateUtil.getSession().connection();
+            
+            String sql = "SELECT client_reference FROM clinlims.sample " +
+                        "WHERE accession_number = ? ORDER BY id DESC LIMIT 1";
+            
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, accessionNumber);
+            rs = ps.executeQuery();
+            
+            if (rs.next()) {
+                String orderUuid = rs.getString("client_reference");
+                System.out.println("Found order UUID from accession number: " + orderUuid);
+                return orderUuid;
+            }
+        } catch (Exception e) {
+            System.err.println("Error querying by accession number: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (ps != null) ps.close();
+            } catch (Exception e) {
+                System.err.println("Error closing resources: " + e.getMessage());
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Extract order UUID from various possible sources in the request
+     */
+    private String extractOrderUuid(HttpServletRequest request, BaseActionForm dynaForm) {
+        String orderUuid = null;
+        
+        // 1. Try request parameter (direct from URL)
+        orderUuid = request.getParameter("orderUuid");
+        if (orderUuid != null && !orderUuid.isEmpty()) {
+            System.out.println("Order UUID from parameter: " + orderUuid);
+            return orderUuid;
+        }
+        
+        // 2. Try session
+        orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
+        if (orderUuid != null && !orderUuid.isEmpty()) {
+            System.out.println("Order UUID from session: " + orderUuid);
+            return orderUuid;
+        }
+        
+        // 3. Try to get from sample UUID in form
+        try {
+            String sampleUuid = (String) PropertyUtils.getProperty(dynaForm, "uuid");
+            System.out.println("Sample UUID from form: " + sampleUuid);
+            
+            if (sampleUuid != null && !sampleUuid.isEmpty()) {
+                orderUuid = getOrderUuidFromSampleUuid(sampleUuid);
+                if (orderUuid != null && !orderUuid.isEmpty()) {
+                    return orderUuid;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting sample UUID from form: " + e.getMessage());
+        }
+        
+        // 4. Try to get from accession number
+        try {
+            String accessionNumber = (String) PropertyUtils.getProperty(dynaForm, "labNo");
+            System.out.println("Accession number from form: " + accessionNumber);
+            
+            if (accessionNumber != null && !accessionNumber.isEmpty()) {
+                orderUuid = getOrderUuidFromAccessionNumber(accessionNumber);
+                if (orderUuid != null && !orderUuid.isEmpty()) {
+                    return orderUuid;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting accession number from form: " + e.getMessage());
+        }
+        
+        // 5. Try request attribute (might be set by previous action)
+        orderUuid = (String) request.getAttribute("orderUuid");
+        if (orderUuid != null && !orderUuid.isEmpty()) {
+            System.out.println("Order UUID from request attribute: " + orderUuid);
+            return orderUuid;
+        }
+        
+        System.out.println("Could not extract order UUID from any source");
         return null;
     }
 
@@ -127,40 +251,8 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         boolean paymentValidationEnabled = paymentValidationService.isEnabled();
         System.out.println("Payment validation enabled: " + paymentValidationEnabled);
         
-        String orderUuid = null;
-        
-        // Try to get order UUID from multiple sources
-        
-        // 1. Try request parameter (direct from URL)
-        orderUuid = request.getParameter("orderUuid");
-        System.out.println("Order UUID from parameter: " + orderUuid);
-        
-        // 2. Try session
-        if (orderUuid == null || orderUuid.isEmpty()) {
-            orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
-            System.out.println("Order UUID from session: " + orderUuid);
-        }
-        
-        // 3. Try to get sample UUID and look up order UUID
-        if (orderUuid == null || orderUuid.isEmpty()) {
-            try {
-                String sampleUuid = (String) PropertyUtils.getProperty(dynaForm, "uuid");
-                System.out.println("Sample UUID from form: " + sampleUuid);
-                
-                if (sampleUuid != null && !sampleUuid.isEmpty()) {
-                    orderUuid = getOrderUuidFromSampleUuid(sampleUuid);
-                }
-            } catch (Exception e) {
-                System.err.println("Error getting sample UUID: " + e.getMessage());
-            }
-        }
-        
-        // 4. FOR TESTING - Use hardcoded UUID if nothing found
-        if (orderUuid == null || orderUuid.isEmpty()) {
-            orderUuid = "17fda241-a3f6-49b0-83c4-244afb485904"; // Your test UUID from database
-            System.out.println("Using hardcoded test UUID: " + orderUuid);
-        }
-        
+        // Extract order UUID from all possible sources
+        String orderUuid = extractOrderUuid(request, dynaForm);
         System.out.println("Final orderUuid: " + orderUuid);
 
         // If payment validation is enabled and we have an order UUID
@@ -196,6 +288,13 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
                 request.setAttribute("paymentStatus", "error");
                 request.setAttribute("paymentMessage", "Unable to verify payment status. Please contact billing.");
             }
+        } else if (paymentValidationEnabled && (orderUuid == null || orderUuid.isEmpty())) {
+            System.out.println("===== WARNING: Payment validation enabled but no order UUID found =====");
+            // Optionally block if no UUID can be found
+            // Uncomment the following lines to block when UUID is missing:
+            // request.setAttribute("paymentBlocked", "true");
+            // request.setAttribute("paymentStatus", "unknown");
+            // request.setAttribute("paymentMessage", "Unable to identify order for payment verification.");
         }
         System.out.println("===== END PAYMENT VALIDATION CHECK =====");
         // ====== END PAYMENT VALIDATION LOGIC ======
