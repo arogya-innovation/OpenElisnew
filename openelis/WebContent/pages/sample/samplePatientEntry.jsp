@@ -1,4 +1,3 @@
-
 <%@page import="us.mn.state.health.lims.common.formfields.FormFields.Field"%>
 <%@ page language="java" contentType="text/html; charset=utf-8" %>
 <%@ page import="us.mn.state.health.lims.common.action.IActionConstants,
@@ -60,86 +59,13 @@
     fieldsetToJspMap.put("samples","SamplePatientSampleSection.jsp");
     fieldsetToJspMap.put("order","SampleOrderInfoSection.jsp");
 	sampleId = request.getParameter("id");
+	
+	// Payment validation check
+	boolean paymentBlocked = "true".equals(request.getAttribute("paymentBlocked"));
+	String paymentStatus = (String) request.getAttribute("paymentStatus");
+	String paymentMessage = (String) request.getAttribute("paymentMessage");
+	String orderUuid = (String) request.getAttribute("orderUuid");
 %>
-
-
-
-<!-- Payment Warning Modal -->
-<logic:equal name="<%=formName%>" property="paymentBlocked" value="true">
-    <div class="payment-warning-overlay" id="paymentWarningOverlay">
-        <div class="payment-warning-modal">
-            <div class="warning-header">
-                <span class="warning-icon">⚠️</span>
-                <h2>Payment Required</h2>
-            </div>
-            
-            <div class="payment-details">
-                <div class="detail-row">
-                    <strong>Status:</strong> 
-                    <span class="status-badge">
-                        <bean:write name="<%=formName%>" property="paymentStatus"/>
-                    </span>
-                </div>
-                <div class="detail-row message">
-                    <bean:write name="<%=formName%>" property="paymentMessage"/>
-                </div>
-            </div>
-            
-            <div class="warning-instructions">
-                <p>Sample collection cannot proceed until payment is verified.</p>
-                <p>Please complete payment at the billing counter before continuing.</p>
-            </div>
-            
-            <div class="warning-actions">
-                <button type="button" class="btn btn-primary" onclick="window.location.href='/billing'">
-                    Go to Billing
-                </button>
-                <button type="button" class="btn btn-secondary" onclick="window.history.back()">
-                    Go Back
-                </button>
-            </div>
-        </div>
-    </div>
-</logic:equal>
-
-
-<!-- Disable form if payment blocked -->
-<logic:equal name="<%=formName%>" property="paymentBlocked" value="true">
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Add class to body to disable all form elements
-            document.body.classList.add('payment-blocked-form');
-            
-            // Disable all form inputs
-            var formElements = document.querySelectorAll('input, select, textarea, button');
-            formElements.forEach(function(element) {
-                // Don't disable the warning modal buttons
-                if (!element.closest('.warning-actions')) {
-                    element.disabled = true;
-                    element.style.cursor = 'not-allowed';
-                }
-            });
-            
-            // Prevent form submission
-            var forms = document.querySelectorAll('form');
-            forms.forEach(function(form) {
-                form.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    alert('Payment verification required before sample collection.');
-                    return false;
-                });
-            });
-        });
-    </script>
-</logic:equal>
-
-
-
-
-
-
-
-
 
 <script type="text/javascript" src="<%=basePath%>scripts/utilities.js?ver=<%= Versioning.getBuildNumber() %>" ></script>
 
@@ -154,6 +80,126 @@
 <script src="scripts/customAutocomplete.js?ver=<%= Versioning.getBuildNumber() %>"></script>
 <script type="text/javascript" src="scripts/ajaxCalls.js?ver=<%= Versioning.getBuildNumber() %>"></script>
 
+<!-- Payment Warning Modal -->
+<% if (paymentBlocked) { %>
+<style>
+.payment-warning-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 10000;
+}
+.payment-warning-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    z-index: 10001;
+}
+.warning-header {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #d9534f;
+}
+.warning-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 10px;
+}
+.payment-details {
+    background: #f8f9fa;
+    padding: 15px;
+    margin: 20px 0;
+    border-left: 4px solid #d9534f;
+}
+.warning-actions {
+    text-align: center;
+    margin-top: 20px;
+}
+.warning-actions button {
+    padding: 10px 20px;
+    margin: 5px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.btn-primary { background: #0275d8; color: white; }
+.btn-secondary { background: #6c757d; color: white; }
+.btn-info { background: #5bc0de; color: white; }
+</style>
+
+<div class="payment-warning-overlay">
+    <div class="payment-warning-modal">
+        <div class="warning-header">
+            <span class="warning-icon">⚠️</span>
+            <h2>Payment Required</h2>
+        </div>
+        
+        <div class="payment-details">
+            <p><strong>Status:</strong> <%= paymentStatus != null ? paymentStatus : "Unknown" %></p>
+            <p><strong>Message:</strong> <%= paymentMessage != null ? paymentMessage : "Payment verification required" %></p>
+            <% if (orderUuid != null) { %>
+            <p><strong>Order ID:</strong> <%= orderUuid %></p>
+            <% } %>
+        </div>
+        
+        <p style="text-align: center;">
+            <strong>Sample collection cannot proceed until payment is verified.</strong><br/>
+            Please complete payment at the billing counter.
+        </p>
+        
+        <div class="warning-actions">
+            <button type="button" class="btn-primary" onclick="window.location.href='<%= basePath %>billing'">
+                Go to Billing
+            </button>
+            <button type="button" class="btn-secondary" onclick="window.history.back()">
+                Go Back
+            </button>
+            <button type="button" class="btn-info" onclick="window.location.reload()">
+                Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function() {
+    // Disable all form elements
+    var elements = document.querySelectorAll('input, select, textarea, button');
+    for (var i = 0; i < elements.length; i++) {
+        if (!elements[i].closest('.warning-actions')) {
+            elements[i].disabled = true;
+        }
+    }
+    
+    // Prevent form submission
+    var forms = document.querySelectorAll('form');
+    for (var i = 0; i < forms.length; i++) {
+        forms[i].onsubmit = function(e) {
+            e.preventDefault();
+            alert('Payment verification required.');
+            return false;
+        };
+    }
+    
+    // Override save function
+    window.savePage = function() {
+        alert('Payment verification required before saving.');
+        return false;
+    };
+})();
+</script>
+<% } %>
 
 <script type="text/javascript" >
 
@@ -402,7 +448,7 @@ function checkValidTime(time)
 		setFieldErrorDisplay(time);
 		setSampleFieldInvalid(time.name);
 	}
-5
+
 	setSave();
 }
 
