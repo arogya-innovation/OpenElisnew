@@ -11,7 +11,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 /**
- * Service to validate payment status for lab orders via Odoo API
+ * Service to validate payment status for lab orders via Odoo JSON-RPC API
  * Java 7 compatible implementation using URLConnection
  */
 public class PaymentValidationService {
@@ -118,10 +118,19 @@ public class PaymentValidationService {
             connection.setDoOutput(true);
             connection.setDoInput(true);
             
-            // Prepare request body
+            // Prepare JSON-RPC 2.0 request body
+            JSONObject params = new JSONObject();
+            params.put("order_uuid", orderUuid);
+            
             JSONObject requestBody = new JSONObject();
-            requestBody.put("order_uuid", orderUuid);
+            requestBody.put("jsonrpc", "2.0");
+            requestBody.put("method", "call");
+            requestBody.put("params", params);
+            requestBody.put("id", 1);
+            
             String jsonInputString = requestBody.toString();
+            
+            System.out.println("Sending payment validation request: " + jsonInputString);
             
             // Send request
             outputStream = new DataOutputStream(connection.getOutputStream());
@@ -130,6 +139,7 @@ public class PaymentValidationService {
             
             // Get response code
             int responseCode = connection.getResponseCode();
+            System.out.println("Response code: " + responseCode);
             
             // Read response
             reader = new BufferedReader(
@@ -141,11 +151,22 @@ public class PaymentValidationService {
                 response.append(inputLine);
             }
             
-            // Parse JSON response
-            JSONObject result = new JSONObject(response.toString());
+            String responseString = response.toString();
+            System.out.println("Payment validation response: " + responseString);
             
-            // Log the response for debugging
-            System.out.println("Payment validation response for order " + orderUuid + ": " + result.toString());
+            // Parse JSON-RPC response
+            JSONObject jsonResponse = new JSONObject(responseString);
+            
+            // Check if there's an error in the JSON-RPC response
+            if (jsonResponse.has("error")) {
+                JSONObject error = jsonResponse.getJSONObject("error");
+                String errorMessage = error.optString("message", "Unknown error");
+                System.err.println("JSON-RPC error: " + errorMessage);
+                return new PaymentStatus("error", false, errorMessage);
+            }
+            
+            // Extract the result object
+            JSONObject result = jsonResponse.getJSONObject("result");
             
             return new PaymentStatus(
                 result.optString("status", "error"),
@@ -201,16 +222,9 @@ public class PaymentValidationService {
      */
     public boolean testConnection() {
         try {
-            URL url = new URL(odooApiUrl);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-            
-            int responseCode = connection.getResponseCode();
-            connection.disconnect();
-            
-            return responseCode > 0;
+            // Test with a dummy UUID
+            PaymentStatus status = validatePayment("test-connection-uuid");
+            return status != null;
         } catch (Exception e) {
             System.err.println("Connection test failed: " + e.getMessage());
             return false;
