@@ -22,9 +22,13 @@ import us.mn.state.health.lims.siteinformation.daoimpl.SiteInformationDAOImpl;
 import us.mn.state.health.lims.siteinformation.valueholder.SiteInformation;
 import us.mn.state.health.lims.payment.service.PaymentValidationService;
 import us.mn.state.health.lims.payment.service.PaymentValidationService.PaymentStatus;
+import us.mn.state.health.lims.hibernate.HibernateUtil;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Arrays;
 
 /**
@@ -41,6 +45,50 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         this.sampleSourceDAO = new SampleSourceDAOImpl();
         this.providerDAO = new ProviderDAOImpl();
         this.paymentValidationService = new PaymentValidationService();
+    }
+    
+    /**
+     * Get order UUID from external_reference table using sample UUID
+     */
+    private String getOrderUuidFromSampleUuid(String sampleUuid) {
+        if (sampleUuid == null || sampleUuid.isEmpty()) {
+            return null;
+        }
+        
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = HibernateUtil.getSession().connection();
+            
+            // Query external_reference table
+            String sql = "SELECT external_id FROM clinlims.external_reference " +
+                        "WHERE item_id = ? ORDER BY id DESC LIMIT 1";
+            
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, sampleUuid);
+            rs = ps.executeQuery();
+            
+            if (rs.next()) {
+                String orderUuid = rs.getString("external_id");
+                System.out.println("Found order UUID from external_reference: " + orderUuid);
+                return orderUuid;
+            }
+        } catch (Exception e) {
+            System.err.println("Error querying external_reference: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (ps != null) ps.close();
+                // Don't close connection - managed by Hibernate
+            } catch (Exception e) {
+                System.err.println("Error closing resources: " + e.getMessage());
+            }
+        }
+        
+        return null;
     }
 
     protected ActionForward performAction(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response)
@@ -72,98 +120,84 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             fieldsetOrder = sampleEntryFieldsetOrder.getValue().split("\\|");
         }
 
-       // ====== PAYMENT VALIDATION LOGIC ======
-// Check if payment validation is enabled
-SiteInformation paymentValidationEnabledInfo = siteInfo.getSiteInformationByName("enablePaymentValidation");
-boolean paymentValidationEnabled = true;
-
-if (paymentValidationEnabledInfo != null && paymentValidationEnabledInfo.getValue() != null) {
-    paymentValidationEnabled = "true".equalsIgnoreCase(paymentValidationEnabledInfo.getValue());
-}
-
-// Check if there's an order UUID in the request (coming from Bahmni)
-// String orderUuid = request.getParameter("orderUuid");
-// String orderUuid = "17fda241-a3f6-49b0-83c4-244afb485904"; // Your test UUID
-
-
-
-// ====== Resolve OpenMRS Order UUID ======
-
-// Try request parameter first
-String orderUuid = request.getParameter("orderUuid");
-
-// If null, fallback to the form's sample UUID
-if (orderUuid == null || orderUuid.isEmpty()) {
-    // "uuid" property in dynaForm maps to sample.uuid
-    orderUuid = (String) PropertyUtils.getProperty(dynaForm, "uuid");
-}
-
-// Debug log
-System.out.println("Resolved OpenMRS Order UUID for payment check: " + orderUuid);
-
-
-
-System.out.println("===== PAYMENT VALIDATION CHECK =====");
-System.out.println("Order UUID from parameter: " + orderUuid);
-
-// Alternative: Check if it's stored in session
-if (orderUuid == null || orderUuid.isEmpty()) {
-    orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
-    System.out.println("Order UUID from session: " + orderUuid);
-}
-
-// Alternative: Check from lab number or accession number
-if (orderUuid == null || orderUuid.isEmpty()) {
-    orderUuid = request.getParameter("labNo");
-    System.out.println("Order UUID from labNo: " + orderUuid);
-}
-
-System.out.println("Payment validation enabled: " + paymentValidationEnabled);
-System.out.println("Final orderUuid: " + orderUuid);
-
-// If payment validation is enabled and we have an order UUID
-if (paymentValidationEnabled && orderUuid != null && !orderUuid.isEmpty()) {
-    try {
-        System.out.println("===== CALLING PAYMENT VALIDATION =====");
-        PaymentStatus paymentStatus = paymentValidationService.validatePayment(orderUuid);
-
-        if (!paymentStatus.isAllowSample()) {
-            // Payment not verified - set attributes to show warning
-            request.setAttribute("paymentBlocked", "true");
-            request.setAttribute("paymentStatus", paymentStatus.getStatus());
-            request.setAttribute("paymentMessage", paymentStatus.getMessage());
-            request.setAttribute("orderUuid", orderUuid);
-
-            // REMOVE THESE LINES - Don't set on form, only on request
-            // PropertyUtils.setProperty(dynaForm, "paymentBlocked", "true");
-            // PropertyUtils.setProperty(dynaForm, "paymentStatus", paymentStatus.getStatus());
-            // PropertyUtils.setProperty(dynaForm, "paymentMessage", paymentStatus.getMessage());
-
-            // Log the blocked attempt
-            System.out.println("Sample collection blocked for order: " + orderUuid +
-                    " - Reason: " + paymentStatus.getMessage());
-        } else {
-            // Payment verified - allow sample collection
-            request.setAttribute("paymentVerified", "true");
-            // REMOVE THIS LINE
-            // PropertyUtils.setProperty(dynaForm, "paymentVerified", "true");
-
-            System.out.println("Payment verified for order: " + orderUuid);
+        // ====== PAYMENT VALIDATION LOGIC ======
+        System.out.println("===== PAYMENT VALIDATION CHECK =====");
+        
+        // Check if payment validation is enabled
+        boolean paymentValidationEnabled = paymentValidationService.isEnabled();
+        System.out.println("Payment validation enabled: " + paymentValidationEnabled);
+        
+        String orderUuid = null;
+        
+        // Try to get order UUID from multiple sources
+        
+        // 1. Try request parameter (direct from URL)
+        orderUuid = request.getParameter("orderUuid");
+        System.out.println("Order UUID from parameter: " + orderUuid);
+        
+        // 2. Try session
+        if (orderUuid == null || orderUuid.isEmpty()) {
+            orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
+            System.out.println("Order UUID from session: " + orderUuid);
         }
-    } catch (Exception e) {
-        // Log the error
-        System.err.println("Error validating payment for order: " + orderUuid);
-        e.printStackTrace();
+        
+        // 3. Try to get sample UUID and look up order UUID
+        if (orderUuid == null || orderUuid.isEmpty()) {
+            try {
+                String sampleUuid = (String) PropertyUtils.getProperty(dynaForm, "uuid");
+                System.out.println("Sample UUID from form: " + sampleUuid);
+                
+                if (sampleUuid != null && !sampleUuid.isEmpty()) {
+                    orderUuid = getOrderUuidFromSampleUuid(sampleUuid);
+                }
+            } catch (Exception e) {
+                System.err.println("Error getting sample UUID: " + e.getMessage());
+            }
+        }
+        
+        // 4. FOR TESTING - Use hardcoded UUID if nothing found
+        if (orderUuid == null || orderUuid.isEmpty()) {
+            orderUuid = "17fda241-a3f6-49b0-83c4-244afb485904"; // Your test UUID from database
+            System.out.println("Using hardcoded test UUID: " + orderUuid);
+        }
+        
+        System.out.println("Final orderUuid: " + orderUuid);
 
-        // Decide behavior on error - currently blocking for safety
-        request.setAttribute("paymentBlocked", "true");
-        request.setAttribute("paymentStatus", "error");
-        request.setAttribute("paymentMessage", "Unable to verify payment status. Please contact billing.");
-        // REMOVE THIS LINE
-        // PropertyUtils.setProperty(dynaForm, "paymentBlocked", "true");
-    }
-}
-// ====== END PAYMENT VALIDATION LOGIC ======
+        // If payment validation is enabled and we have an order UUID
+        if (paymentValidationEnabled && orderUuid != null && !orderUuid.isEmpty()) {
+            try {
+                System.out.println("===== CALLING PAYMENT VALIDATION API =====");
+                PaymentStatus paymentStatus = paymentValidationService.validatePayment(orderUuid);
+                
+                System.out.println("Payment status: " + paymentStatus.getStatus());
+                System.out.println("Allow sample: " + paymentStatus.isAllowSample());
+                System.out.println("Message: " + paymentStatus.getMessage());
+
+                if (!paymentStatus.isAllowSample()) {
+                    // Payment not verified - set attributes to show warning
+                    request.setAttribute("paymentBlocked", "true");
+                    request.setAttribute("paymentStatus", paymentStatus.getStatus());
+                    request.setAttribute("paymentMessage", paymentStatus.getMessage());
+                    request.setAttribute("orderUuid", orderUuid);
+
+                    System.out.println("===== SAMPLE COLLECTION BLOCKED =====");
+                    System.out.println("Reason: " + paymentStatus.getMessage());
+                } else {
+                    // Payment verified - allow sample collection
+                    request.setAttribute("paymentVerified", "true");
+                    System.out.println("===== PAYMENT VERIFIED - ALLOWING SAMPLE COLLECTION =====");
+                }
+            } catch (Exception e) {
+                System.err.println("===== ERROR IN PAYMENT VALIDATION =====");
+                e.printStackTrace();
+
+                // Block on error for safety
+                request.setAttribute("paymentBlocked", "true");
+                request.setAttribute("paymentStatus", "error");
+                request.setAttribute("paymentMessage", "Unable to verify payment status. Please contact billing.");
+            }
+        }
+        System.out.println("===== END PAYMENT VALIDATION CHECK =====");
         // ====== END PAYMENT VALIDATION LOGIC ======
 
         PropertyUtils.setProperty(dynaForm, "receivedDateForDisplay", dateAsText);
