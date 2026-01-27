@@ -74,7 +74,9 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
 
         // ====== PAYMENT VALIDATION LOGIC ======
         // Check if there's an order UUID in the request (coming from Bahmni)
-        String orderUuid = request.getParameter("orderUuid");
+        // String orderUuid = request.getParameter("orderUuid");
+		String orderUuid = "6565e621-2183-45a1-9822-d98fb9aabb5d"; // Your test UUID
+
 
         // Alternative: Check if it's stored in session
         if (orderUuid == null || orderUuid.isEmpty()) {
