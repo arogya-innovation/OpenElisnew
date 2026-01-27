@@ -75,7 +75,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
        // ====== PAYMENT VALIDATION LOGIC ======
 // Check if payment validation is enabled
 SiteInformation paymentValidationEnabledInfo = siteInfo.getSiteInformationByName("enablePaymentValidation");
-boolean paymentValidationEnabled = false;
+boolean paymentValidationEnabled = true;
 
 if (paymentValidationEnabledInfo != null && paymentValidationEnabledInfo.getValue() != null) {
     paymentValidationEnabled = "true".equalsIgnoreCase(paymentValidationEnabledInfo.getValue());
