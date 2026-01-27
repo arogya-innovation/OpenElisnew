@@ -17,6 +17,8 @@
             <form-property name="lastupdated" type="java.sql.Timestamp" initial=""/>
             <form-property name="sampItemCount" type="java.lang.Integer" initial=""/>
             <form-property name="requesterSampleID" type="java.lang.String" initial=""/>
+            <form-property name="uuid" type="java.lang.String"/>
+
 
             <form-property name="providerId" type="java.lang.String" initial=""/>
             <form-property name="providerLastName" type="java.lang.String" initial=""/>
