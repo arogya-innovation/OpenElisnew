@@ -72,61 +72,78 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             fieldsetOrder = sampleEntryFieldsetOrder.getValue().split("\\|");
         }
 
-        // ====== PAYMENT VALIDATION LOGIC ======
-        // Check if there's an order UUID in the request (coming from Bahmni)
-        // String orderUuid = request.getParameter("orderUuid");
-		String orderUuid = "6565e621-2183-45a1-9822-d98fb9aabb5d"; // Your test UUID
+       // ====== PAYMENT VALIDATION LOGIC ======
+// Check if payment validation is enabled
+SiteInformation paymentValidationEnabledInfo = siteInfo.getSiteInformationByName("enablePaymentValidation");
+boolean paymentValidationEnabled = false;
 
+if (paymentValidationEnabledInfo != null && paymentValidationEnabledInfo.getValue() != null) {
+    paymentValidationEnabled = "true".equalsIgnoreCase(paymentValidationEnabledInfo.getValue());
+}
 
-        // Alternative: Check if it's stored in session
-        if (orderUuid == null || orderUuid.isEmpty()) {
-            orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
+// Check if there's an order UUID in the request (coming from Bahmni)
+String orderUuid = request.getParameter("orderUuid");
+System.out.println("===== PAYMENT VALIDATION CHECK =====");
+System.out.println("Order UUID from parameter: " + orderUuid);
+
+// Alternative: Check if it's stored in session
+if (orderUuid == null || orderUuid.isEmpty()) {
+    orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
+    System.out.println("Order UUID from session: " + orderUuid);
+}
+
+// Alternative: Check from lab number or accession number
+if (orderUuid == null || orderUuid.isEmpty()) {
+    orderUuid = request.getParameter("labNo");
+    System.out.println("Order UUID from labNo: " + orderUuid);
+}
+
+System.out.println("Payment validation enabled: " + paymentValidationEnabled);
+System.out.println("Final orderUuid: " + orderUuid);
+
+// If payment validation is enabled and we have an order UUID
+if (paymentValidationEnabled && orderUuid != null && !orderUuid.isEmpty()) {
+    try {
+        System.out.println("===== CALLING PAYMENT VALIDATION =====");
+        PaymentStatus paymentStatus = paymentValidationService.validatePayment(orderUuid);
+
+        if (!paymentStatus.isAllowSample()) {
+            // Payment not verified - set attributes to show warning
+            request.setAttribute("paymentBlocked", "true");
+            request.setAttribute("paymentStatus", paymentStatus.getStatus());
+            request.setAttribute("paymentMessage", paymentStatus.getMessage());
+            request.setAttribute("orderUuid", orderUuid);
+
+            // REMOVE THESE LINES - Don't set on form, only on request
+            // PropertyUtils.setProperty(dynaForm, "paymentBlocked", "true");
+            // PropertyUtils.setProperty(dynaForm, "paymentStatus", paymentStatus.getStatus());
+            // PropertyUtils.setProperty(dynaForm, "paymentMessage", paymentStatus.getMessage());
+
+            // Log the blocked attempt
+            System.out.println("Sample collection blocked for order: " + orderUuid +
+                    " - Reason: " + paymentStatus.getMessage());
+        } else {
+            // Payment verified - allow sample collection
+            request.setAttribute("paymentVerified", "true");
+            // REMOVE THIS LINE
+            // PropertyUtils.setProperty(dynaForm, "paymentVerified", "true");
+
+            System.out.println("Payment verified for order: " + orderUuid);
         }
-        
-        // Alternative: Check from lab number or accession number
-        if (orderUuid == null || orderUuid.isEmpty()) {
-            orderUuid = request.getParameter("labNo");
-        }
+    } catch (Exception e) {
+        // Log the error
+        System.err.println("Error validating payment for order: " + orderUuid);
+        e.printStackTrace();
 
-        // If payment validation is enabled and we have an order UUID
-        if (paymentValidationService.isEnabled() && orderUuid != null && !orderUuid.isEmpty()) {
-            try {
-                PaymentStatus paymentStatus = paymentValidationService.validatePayment(orderUuid);
-
-                if (!paymentStatus.isAllowSample()) {
-                    // Payment not verified - set attributes to show warning
-                    request.setAttribute("paymentBlocked", "true");
-                    request.setAttribute("paymentStatus", paymentStatus.getStatus());
-                    request.setAttribute("paymentMessage", paymentStatus.getMessage());
-                    request.setAttribute("orderUuid", orderUuid);
-
-                    // Also set in form for JSP access
-                    PropertyUtils.setProperty(dynaForm, "paymentBlocked", "true");
-                    PropertyUtils.setProperty(dynaForm, "paymentStatus", paymentStatus.getStatus());
-                    PropertyUtils.setProperty(dynaForm, "paymentMessage", paymentStatus.getMessage());
-
-                    // Log the blocked attempt
-                    System.out.println("Sample collection blocked for order: " + orderUuid +
-                            " - Reason: " + paymentStatus.getMessage());
-                } else {
-                    // Payment verified - allow sample collection
-                    request.setAttribute("paymentVerified", "true");
-                    PropertyUtils.setProperty(dynaForm, "paymentVerified", "true");
-
-                    System.out.println("Payment verified for order: " + orderUuid);
-                }
-            } catch (Exception e) {
-                // Log the error
-                System.err.println("Error validating payment for order: " + orderUuid);
-                e.printStackTrace();
-
-                // Decide behavior on error - currently blocking for safety
-                request.setAttribute("paymentBlocked", "true");
-                request.setAttribute("paymentStatus", "error");
-                request.setAttribute("paymentMessage", "Unable to verify payment status. Please contact billing.");
-                PropertyUtils.setProperty(dynaForm, "paymentBlocked", "true");
-            }
-        }
+        // Decide behavior on error - currently blocking for safety
+        request.setAttribute("paymentBlocked", "true");
+        request.setAttribute("paymentStatus", "error");
+        request.setAttribute("paymentMessage", "Unable to verify payment status. Please contact billing.");
+        // REMOVE THIS LINE
+        // PropertyUtils.setProperty(dynaForm, "paymentBlocked", "true");
+    }
+}
+// ====== END PAYMENT VALIDATION LOGIC ======
         // ====== END PAYMENT VALIDATION LOGIC ======
 
         PropertyUtils.setProperty(dynaForm, "receivedDateForDisplay", dateAsText);
