@@ -277,19 +277,19 @@ public class PaymentValidationService {
             return paymentStatus;
             
         } catch (java.net.SocketTimeoutException e) {
-            System.err.println("Payment validation timeout for patient " + patientUuid);
+            System.err.println("Payment validation timeout for patient " + patient_ref);
             e.printStackTrace();
             return new PaymentStatus("error", false, 
                 "Payment verification timeout. Please try again or contact billing.");
                 
         } catch (java.io.IOException e) {
-            System.err.println("Payment validation IO error for patient " + patientUuid + ": " + e.getMessage());
+            System.err.println("Payment validation IO error for patient " + patient_ref + ": " + e.getMessage());
             e.printStackTrace();
             return new PaymentStatus("error", false, 
                 "Unable to connect to payment service. Please contact billing.");
                 
         } catch (Exception e) {
-            System.err.println("Payment validation error for patient " + patientUuid + ": " + e.getMessage());
+            System.err.println("Payment validation error for patient " + patient_ref + ": " + e.getMessage());
             e.printStackTrace();
             return new PaymentStatus("error", false, 
                 "Unable to verify payment. Please contact billing department.");
