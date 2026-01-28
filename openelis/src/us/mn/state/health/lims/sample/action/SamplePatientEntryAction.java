@@ -22,6 +22,7 @@ import us.mn.state.health.lims.siteinformation.daoimpl.SiteInformationDAOImpl;
 import us.mn.state.health.lims.siteinformation.valueholder.SiteInformation;
 import us.mn.state.health.lims.payment.service.PaymentValidationService;
 import us.mn.state.health.lims.payment.service.PaymentValidationService.PaymentStatus;
+import us.mn.state.health.lims.payment.service.PaymentValidationService.InvoiceInfo;
 import us.mn.state.health.lims.hibernate.HibernateUtil;
 
 import javax.servlet.http.HttpServletRequest;
@@ -30,6 +31,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * The SampleEntryAction class represents the initial Action for the SampleEntry
@@ -48,10 +50,9 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
     }
     
     /**
-     * Get order UUID from external_reference table using sample UUID,
-     * or from client_reference field in sample table
+     * Get patient UUID from sample UUID
      */
-    private String getOrderUuidFromSampleUuid(String sampleUuid) {
+    private String getPatientUuidFromSampleUuid(String sampleUuid) {
         if (sampleUuid == null || sampleUuid.isEmpty()) {
             return null;
         }
@@ -63,41 +64,24 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         try {
             conn = HibernateUtil.getSession().connection();
             
-            // First try: Query external_reference table
-            String sql = "SELECT external_id FROM clinlims.external_reference " +
-                        "WHERE item_id = ? ORDER BY id DESC LIMIT 1";
+            // Query to get patient UUID from sample
+            String sql = "SELECT p.uuid FROM clinlims.patient p " +
+                        "INNER JOIN clinlims.sample_human sh ON sh.patient_id = p.id " +
+                        "INNER JOIN clinlims.sample s ON s.id = sh.samp_id " +
+                        "WHERE s.uuid = ? LIMIT 1";
             
             ps = conn.prepareStatement(sql);
             ps.setString(1, sampleUuid);
             rs = ps.executeQuery();
             
             if (rs.next()) {
-                String orderUuid = rs.getString("external_id");
-                System.out.println("Found order UUID from external_reference: " + orderUuid);
-                if (orderUuid != null && !orderUuid.isEmpty()) {
-                    return orderUuid;
-                }
-            }
-            
-            // Second try: Get from client_reference in sample table
-            if (rs != null) rs.close();
-            if (ps != null) ps.close();
-            
-            sql = "SELECT client_reference FROM clinlims.sample WHERE uuid = ?";
-            ps = conn.prepareStatement(sql);
-            ps.setString(1, sampleUuid);
-            rs = ps.executeQuery();
-            
-            if (rs.next()) {
-                String orderUuid = rs.getString("client_reference");
-                System.out.println("Found order UUID from sample.client_reference: " + orderUuid);
-                if (orderUuid != null && !orderUuid.isEmpty()) {
-                    return orderUuid;
-                }
+                String patientUuid = rs.getString("uuid");
+                System.out.println("Found patient UUID from sample UUID: " + patientUuid);
+                return patientUuid;
             }
             
         } catch (Exception e) {
-            System.err.println("Error querying for order UUID: " + e.getMessage());
+            System.err.println("Error querying for patient UUID from sample: " + e.getMessage());
             e.printStackTrace();
         } finally {
             try {
@@ -113,9 +97,9 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
     }
     
     /**
-     * Get order UUID from accession number
+     * Get patient UUID from accession number
      */
-    private String getOrderUuidFromAccessionNumber(String accessionNumber) {
+    private String getPatientUuidFromAccessionNumber(String accessionNumber) {
         if (accessionNumber == null || accessionNumber.isEmpty()) {
             return null;
         }
@@ -127,20 +111,23 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         try {
             conn = HibernateUtil.getSession().connection();
             
-            String sql = "SELECT client_reference FROM clinlims.sample " +
-                        "WHERE accession_number = ? ORDER BY id DESC LIMIT 1";
+            String sql = "SELECT p.uuid FROM clinlims.patient p " +
+                        "INNER JOIN clinlims.sample_human sh ON sh.patient_id = p.id " +
+                        "INNER JOIN clinlims.sample s ON s.id = sh.samp_id " +
+                        "WHERE s.accession_number = ? " +
+                        "ORDER BY s.id DESC LIMIT 1";
             
             ps = conn.prepareStatement(sql);
             ps.setString(1, accessionNumber);
             rs = ps.executeQuery();
             
             if (rs.next()) {
-                String orderUuid = rs.getString("client_reference");
-                System.out.println("Found order UUID from accession number: " + orderUuid);
-                return orderUuid;
+                String patientUuid = rs.getString("uuid");
+                System.out.println("Found patient UUID from accession number: " + patientUuid);
+                return patientUuid;
             }
         } catch (Exception e) {
-            System.err.println("Error querying by accession number: " + e.getMessage());
+            System.err.println("Error querying patient UUID by accession number: " + e.getMessage());
             e.printStackTrace();
         } finally {
             try {
@@ -155,63 +142,128 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
     }
     
     /**
-     * Extract order UUID from various possible sources in the request
+     * Get patient UUID from patient ID in form
      */
-    private String extractOrderUuid(HttpServletRequest request, BaseActionForm dynaForm) {
-        String orderUuid = null;
+    private String getPatientUuidFromPatientId(String patientId) {
+        if (patientId == null || patientId.isEmpty()) {
+            return null;
+        }
+        
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = HibernateUtil.getSession().connection();
+            
+            String sql = "SELECT uuid FROM clinlims.patient WHERE id = ?";
+            
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, Integer.parseInt(patientId));
+            rs = ps.executeQuery();
+            
+            if (rs.next()) {
+                String patientUuid = rs.getString("uuid");
+                System.out.println("Found patient UUID from patient ID: " + patientUuid);
+                return patientUuid;
+            }
+        } catch (Exception e) {
+            System.err.println("Error querying patient UUID by patient ID: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (ps != null) ps.close();
+            } catch (Exception e) {
+                System.err.println("Error closing resources: " + e.getMessage());
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Extract patient UUID from various possible sources in the request
+     */
+    private String extractPatientUuid(HttpServletRequest request, BaseActionForm dynaForm) {
+        String patientUuid = null;
         
         // 1. Try request parameter (direct from URL)
-        orderUuid = request.getParameter("orderUuid");
-        if (orderUuid != null && !orderUuid.isEmpty()) {
-            System.out.println("Order UUID from parameter: " + orderUuid);
-            return orderUuid;
+        patientUuid = request.getParameter("patientUuid");
+        if (patientUuid != null && !patientUuid.isEmpty()) {
+            System.out.println("Patient UUID from parameter: " + patientUuid);
+            return patientUuid;
         }
         
         // 2. Try session
-        orderUuid = (String) request.getSession().getAttribute("currentOrderUuid");
-        if (orderUuid != null && !orderUuid.isEmpty()) {
-            System.out.println("Order UUID from session: " + orderUuid);
-            return orderUuid;
+        patientUuid = (String) request.getSession().getAttribute("currentPatientUuid");
+        if (patientUuid != null && !patientUuid.isEmpty()) {
+            System.out.println("Patient UUID from session: " + patientUuid);
+            return patientUuid;
         }
         
-        // 3. Try to get from sample UUID in form
+        // 3. Try to get from PatientManagmentInfo in form
+        try {
+            PatientManagmentInfo patientInfo = (PatientManagmentInfo) PropertyUtils.getProperty(dynaForm, "patientProperties");
+            if (patientInfo != null) {
+                // Try to get UUID from patient info
+                String uuid = patientInfo.getPatientUUID();
+                if (uuid != null && !uuid.isEmpty()) {
+                    System.out.println("Patient UUID from PatientManagmentInfo: " + uuid);
+                    return uuid;
+                }
+                
+                // Try to get patient ID and lookup UUID
+                String patientId = patientInfo.getPatientID();
+                if (patientId != null && !patientId.isEmpty()) {
+                    patientUuid = getPatientUuidFromPatientId(patientId);
+                    if (patientUuid != null) {
+                        return patientUuid;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting patient UUID from PatientManagmentInfo: " + e.getMessage());
+        }
+        
+        // 4. Try to get from sample UUID in form
         try {
             String sampleUuid = (String) PropertyUtils.getProperty(dynaForm, "uuid");
             System.out.println("Sample UUID from form: " + sampleUuid);
             
             if (sampleUuid != null && !sampleUuid.isEmpty()) {
-                orderUuid = getOrderUuidFromSampleUuid(sampleUuid);
-                if (orderUuid != null && !orderUuid.isEmpty()) {
-                    return orderUuid;
+                patientUuid = getPatientUuidFromSampleUuid(sampleUuid);
+                if (patientUuid != null && !patientUuid.isEmpty()) {
+                    return patientUuid;
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error getting sample UUID from form: " + e.getMessage());
+            System.err.println("Error getting patient UUID from sample UUID: " + e.getMessage());
         }
         
-        // 4. Try to get from accession number
+        // 5. Try to get from accession number
         try {
             String accessionNumber = (String) PropertyUtils.getProperty(dynaForm, "labNo");
             System.out.println("Accession number from form: " + accessionNumber);
             
             if (accessionNumber != null && !accessionNumber.isEmpty()) {
-                orderUuid = getOrderUuidFromAccessionNumber(accessionNumber);
-                if (orderUuid != null && !orderUuid.isEmpty()) {
-                    return orderUuid;
+                patientUuid = getPatientUuidFromAccessionNumber(accessionNumber);
+                if (patientUuid != null && !patientUuid.isEmpty()) {
+                    return patientUuid;
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error getting accession number from form: " + e.getMessage());
+            System.err.println("Error getting patient UUID from accession number: " + e.getMessage());
         }
         
-        // 5. Try request attribute (might be set by previous action)
-        orderUuid = (String) request.getAttribute("orderUuid");
-        if (orderUuid != null && !orderUuid.isEmpty()) {
-            System.out.println("Order UUID from request attribute: " + orderUuid);
-            return orderUuid;
+        // 6. Try request attribute (might be set by previous action)
+        patientUuid = (String) request.getAttribute("patientUuid");
+        if (patientUuid != null && !patientUuid.isEmpty()) {
+            System.out.println("Patient UUID from request attribute: " + patientUuid);
+            return patientUuid;
         }
         
-        System.out.println("Could not extract order UUID from any source");
+        System.out.println("Could not extract patient UUID from any source");
         return null;
     }
 
@@ -251,15 +303,15 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         boolean paymentValidationEnabled = paymentValidationService.isEnabled();
         System.out.println("Payment validation enabled: " + paymentValidationEnabled);
         
-        // Extract order UUID from all possible sources
-        String orderUuid = extractOrderUuid(request, dynaForm);
-        System.out.println("Final orderUuid: " + orderUuid);
+        // Extract patient UUID from all possible sources
+        String patientUuid = extractPatientUuid(request, dynaForm);
+        System.out.println("Final patientUuid: " + patientUuid);
 
-        // If payment validation is enabled and we have an order UUID
-        if (paymentValidationEnabled && orderUuid != null && !orderUuid.isEmpty()) {
+        // If payment validation is enabled and we have a patient UUID
+        if (paymentValidationEnabled && patientUuid != null && !patientUuid.isEmpty()) {
             try {
                 System.out.println("===== CALLING PAYMENT VALIDATION API =====");
-                PaymentStatus paymentStatus = paymentValidationService.validatePayment(orderUuid);
+                PaymentStatus paymentStatus = paymentValidationService.validatePayment(patientUuid);
                 
                 System.out.println("Payment status: " + paymentStatus.getStatus());
                 System.out.println("Allow sample: " + paymentStatus.isAllowSample());
@@ -270,14 +322,48 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
                     request.setAttribute("paymentBlocked", "true");
                     request.setAttribute("paymentStatus", paymentStatus.getStatus());
                     request.setAttribute("paymentMessage", paymentStatus.getMessage());
-                    request.setAttribute("orderUuid", orderUuid);
+                    request.setAttribute("patientUuid", patientUuid);
+                    
+                    // Add detailed patient and invoice information
+                    if (paymentStatus.getPatientName() != null) {
+                        request.setAttribute("paymentPatientName", paymentStatus.getPatientName());
+                    }
+                    if (paymentStatus.getPatientRef() != null) {
+                        request.setAttribute("paymentPatientRef", paymentStatus.getPatientRef());
+                    }
+                    if (paymentStatus.getTotalDueAmount() != null) {
+                        request.setAttribute("paymentTotalDue", paymentStatus.getTotalDueAmount());
+                    }
+                    if (paymentStatus.getInvoiceCount() != null) {
+                        request.setAttribute("paymentInvoiceCount", paymentStatus.getInvoiceCount());
+                    }
+                    
+                    // Add invoice details if available
+                    List<InvoiceInfo> invoices = paymentStatus.getInvoices();
+                    if (invoices != null && !invoices.isEmpty()) {
+                        request.setAttribute("paymentInvoices", invoices);
+                        
+                        // Log invoice details
+                        System.out.println("Unpaid invoices:");
+                        for (InvoiceInfo invoice : invoices) {
+                            System.out.println("  - " + invoice.getInvoiceNumber() + 
+                                             ": Due=" + invoice.getAmountDue() + 
+                                             ", Total=" + invoice.getTotalAmount() +
+                                             ", Date=" + invoice.getInvoiceDate());
+                        }
+                    }
 
                     System.out.println("===== SAMPLE COLLECTION BLOCKED =====");
                     System.out.println("Reason: " + paymentStatus.getMessage());
+                    System.out.println("Patient: " + paymentStatus.getPatientName());
+                    System.out.println("Total Due: " + paymentStatus.getTotalDueAmount());
                 } else {
                     // Payment verified - allow sample collection
                     request.setAttribute("paymentVerified", "true");
+                    request.setAttribute("paymentPatientName", paymentStatus.getPatientName());
+                    
                     System.out.println("===== PAYMENT VERIFIED - ALLOWING SAMPLE COLLECTION =====");
+                    System.out.println("Patient: " + paymentStatus.getPatientName());
                 }
             } catch (Exception e) {
                 System.err.println("===== ERROR IN PAYMENT VALIDATION =====");
@@ -288,13 +374,13 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
                 request.setAttribute("paymentStatus", "error");
                 request.setAttribute("paymentMessage", "Unable to verify payment status. Please contact billing.");
             }
-        } else if (paymentValidationEnabled && (orderUuid == null || orderUuid.isEmpty())) {
-            System.out.println("===== WARNING: Payment validation enabled but no order UUID found =====");
+        } else if (paymentValidationEnabled && (patientUuid == null || patientUuid.isEmpty())) {
+            System.out.println("===== WARNING: Payment validation enabled but no patient UUID found =====");
             // Optionally block if no UUID can be found
             // Uncomment the following lines to block when UUID is missing:
             // request.setAttribute("paymentBlocked", "true");
             // request.setAttribute("paymentStatus", "unknown");
-            // request.setAttribute("paymentMessage", "Unable to identify order for payment verification.");
+            // request.setAttribute("paymentMessage", "Unable to identify patient for payment verification.");
         }
         System.out.println("===== END PAYMENT VALIDATION CHECK =====");
         // ====== END PAYMENT VALIDATION LOGIC ======
