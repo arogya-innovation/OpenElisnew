@@ -684,6 +684,15 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         // ====== PAYMENT VALIDATION LOGIC ======
         System.out.println("===== PAYMENT VALIDATION CHECK =====");
         
+        // DEBUGGING: Print all request parameters
+        System.out.println("=== ALL REQUEST PARAMETERS ===");
+        java.util.Enumeration<String> params = request.getParameterNames();
+        while (params.hasMoreElements()) {
+            String param = params.nextElement();
+            System.out.println("  " + param + " = " + request.getParameter(param));
+        }
+        System.out.println("=== END REQUEST PARAMETERS ===");
+        
         // DEBUGGING: Enable this temporarily to see all available form fields
         // Uncomment the next line to debug what fields are available
         // us.mn.state.health.lims.common.util.FormDebugger.dumpAll(request, dynaForm);
@@ -708,7 +717,9 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
                             (prop.getName().toLowerCase().contains("patient") || 
                              prop.getName().toLowerCase().contains("id") ||
                              prop.getName().toLowerCase().contains("uuid") ||
-                             prop.getName().toLowerCase().contains("person"))) {
+                             prop.getName().toLowerCase().contains("person") ||
+                             prop.getName().toLowerCase().contains("national") ||
+                             prop.getName().toLowerCase().contains("subject"))) {
                             try {
                                 Object val = PropertyUtils.getProperty(patientPropsObj, prop.getName());
                                 System.out.println("    " + prop.getName() + " = " + val);
