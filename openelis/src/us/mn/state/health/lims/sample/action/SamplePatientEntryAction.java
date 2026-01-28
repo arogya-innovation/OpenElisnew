@@ -190,7 +190,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         
         // 1. Try request parameter (direct from URL)
         // patientUuid = request.getParameter("patientUuid");
-		        patientUuid = "98d62923-6b7d-4182-9672-963b5cff769";
+		        patientUuid = "98d62923-6b7d-4182-9672-963b5cff769d";
 
         if (patientUuid != null && !patientUuid.isEmpty()) {
             System.out.println("Patient UUID from parameter: " + patientUuid);
