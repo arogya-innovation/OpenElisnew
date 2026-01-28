@@ -435,7 +435,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         
         // DEBUGGING: Enable this temporarily to see all available form fields
         // Uncomment the next line to debug what fields are available
-        // us.mn.state.health.lims.common.util.FormDebugger.dumpAll(request, dynaForm);
+        us.mn.state.health.lims.common.util.FormDebugger.dumpAll(request, dynaForm);
         
         // Check if payment validation is enabled
         boolean paymentValidationEnabled = paymentValidationService.isEnabled();
