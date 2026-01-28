@@ -1,6 +1,3 @@
-public class FormDebugger {
-    
-}
 package us.mn.state.health.lims.common.util;
 
 import org.apache.commons.beanutils.PropertyUtils;
