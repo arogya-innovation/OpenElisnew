@@ -9,7 +9,8 @@
 			     us.mn.state.health.lims.common.formfields.FormFields,
                  us.mn.state.health.lims.common.util.Versioning,
 			     us.mn.state.health.lims.common.util.StringUtil,
-			     us.mn.state.health.lims.common.util.IdValuePair" %>
+			     us.mn.state.health.lims.common.util.IdValuePair,
+			     us.mn.state.health.lims.payment.service.PaymentValidationService.InvoiceInfo" %>
 <%@ page import="java.util.Map" %>
 <%@ page import="java.util.HashMap" %>
 <%@ page import="java.util.List" %>
@@ -60,11 +61,16 @@
     fieldsetToJspMap.put("order","SampleOrderInfoSection.jsp");
 	sampleId = request.getParameter("id");
 	
-	// Payment validation check
+	// Payment validation check - Updated for patient-based API
 	boolean paymentBlocked = "true".equals(request.getAttribute("paymentBlocked"));
 	String paymentStatus = (String) request.getAttribute("paymentStatus");
 	String paymentMessage = (String) request.getAttribute("paymentMessage");
-	String orderUuid = (String) request.getAttribute("orderUuid");
+	String patientUuid = (String) request.getAttribute("patientUuid");
+	String paymentPatientName = (String) request.getAttribute("paymentPatientName");
+	String paymentPatientRef = (String) request.getAttribute("paymentPatientRef");
+	Double paymentTotalDue = (Double) request.getAttribute("paymentTotalDue");
+	Integer paymentInvoiceCount = (Integer) request.getAttribute("paymentInvoiceCount");
+	List<InvoiceInfo> paymentInvoices = (List<InvoiceInfo>) request.getAttribute("paymentInvoices");
 %>
 
 <script type="text/javascript" src="<%=basePath%>scripts/utilities.js?ver=<%= Versioning.getBuildNumber() %>" ></script>
@@ -80,7 +86,7 @@
 <script src="scripts/customAutocomplete.js?ver=<%= Versioning.getBuildNumber() %>"></script>
 <script type="text/javascript" src="scripts/ajaxCalls.js?ver=<%= Versioning.getBuildNumber() %>"></script>
 
-<!-- Payment Warning Modal -->
+<!-- Payment Warning Modal - Enhanced for Patient Payment Status -->
 <% if (paymentBlocked) { %>
 <style>
 .payment-warning-overlay {
@@ -89,84 +95,260 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.85);
     z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .payment-warning-modal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     background: white;
     padding: 30px;
-    border-radius: 8px;
-    max-width: 500px;
+    border-radius: 10px;
+    max-width: 600px;
     width: 90%;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     z-index: 10001;
 }
 .warning-header {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
     color: #d9534f;
+    border-bottom: 3px solid #d9534f;
+    padding-bottom: 15px;
 }
 .warning-icon {
-    font-size: 48px;
+    font-size: 60px;
     display: block;
     margin-bottom: 10px;
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
 }
 .payment-details {
+    background: #fff3cd;
+    padding: 20px;
+    margin: 20px 0;
+    border-left: 5px solid #ffc107;
+    border-radius: 4px;
+}
+.payment-details h3 {
+    margin-top: 0;
+    color: #856404;
+    font-size: 18px;
+}
+.patient-info {
     background: #f8f9fa;
     padding: 15px;
+    margin: 15px 0;
+    border-left: 4px solid #007bff;
+    border-radius: 4px;
+}
+.patient-info .info-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    padding: 5px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+.patient-info .info-label {
+    font-weight: bold;
+    color: #495057;
+}
+.patient-info .info-value {
+    color: #212529;
+}
+.invoice-list {
+    margin: 15px 0;
+    max-height: 250px;
+    overflow-y: auto;
+}
+.invoice-item {
+    background: white;
+    padding: 12px;
+    margin: 8px 0;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    border-left: 3px solid #dc3545;
+}
+.invoice-item .invoice-header {
+    font-weight: bold;
+    color: #dc3545;
+    margin-bottom: 5px;
+}
+.invoice-item .invoice-detail {
+    font-size: 13px;
+    color: #6c757d;
+    margin: 3px 0;
+}
+.total-due {
+    background: #dc3545;
+    color: white;
+    padding: 15px;
     margin: 20px 0;
-    border-left: 4px solid #d9534f;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+}
+.warning-message {
+    text-align: center;
+    padding: 20px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    margin: 20px 0;
+    font-weight: 500;
 }
 .warning-actions {
     text-align: center;
-    margin-top: 20px;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 2px solid #dee2e6;
 }
 .warning-actions button {
-    padding: 10px 20px;
+    padding: 12px 24px;
     margin: 5px;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.3s;
 }
-.btn-primary { background: #0275d8; color: white; }
-.btn-secondary { background: #6c757d; color: white; }
-.btn-info { background: #5bc0de; color: white; }
+.warning-actions button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+.btn-primary { 
+    background: #007bff; 
+    color: white; 
+}
+.btn-primary:hover { 
+    background: #0056b3; 
+}
+.btn-secondary { 
+    background: #6c757d; 
+    color: white; 
+}
+.btn-secondary:hover { 
+    background: #545b62; 
+}
+.btn-info { 
+    background: #17a2b8; 
+    color: white; 
+}
+.btn-info:hover { 
+    background: #117a8b; 
+}
 </style>
 
 <div class="payment-warning-overlay">
     <div class="payment-warning-modal">
         <div class="warning-header">
             <span class="warning-icon">⚠️</span>
-            <h2>Payment Required</h2>
+            <h2>Payment Verification Required</h2>
         </div>
         
-        <div class="payment-details">
-            <p><strong>Status:</strong> <%= paymentStatus != null ? paymentStatus : "Unknown" %></p>
-            <p><strong>Message:</strong> <%= paymentMessage != null ? paymentMessage : "Payment verification required" %></p>
-            <% if (orderUuid != null) { %>
-            <p><strong>Order ID:</strong> <%= orderUuid %></p>
+        <% if (paymentPatientName != null || paymentPatientRef != null) { %>
+        <div class="patient-info">
+            <h3 style="margin-top: 0; color: #007bff;">Patient Information</h3>
+            <% if (paymentPatientName != null) { %>
+            <div class="info-row">
+                <span class="info-label">Patient Name:</span>
+                <span class="info-value"><%= paymentPatientName %></span>
+            </div>
+            <% } %>
+            <% if (paymentPatientRef != null && !paymentPatientRef.isEmpty()) { %>
+            <div class="info-row">
+                <span class="info-label">Patient ID:</span>
+                <span class="info-value"><%= paymentPatientRef %></span>
+            </div>
+            <% } %>
+            <% if (patientUuid != null) { %>
+            <div class="info-row">
+                <span class="info-label">Patient UUID:</span>
+                <span class="info-value" style="font-size: 11px;"><%= patientUuid %></span>
+            </div>
             <% } %>
         </div>
+        <% } %>
         
-        <p style="text-align: center;">
-            <strong>Sample collection cannot proceed until payment is verified.</strong><br/>
+        <div class="payment-details">
+            <h3>Payment Status</h3>
+            <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value" style="color: #d9534f; font-weight: bold;">
+                    <%= paymentStatus != null ? paymentStatus.toUpperCase() : "UNPAID" %>
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Message:</span>
+                <span class="info-value"><%= paymentMessage != null ? paymentMessage : "Payment verification required" %></span>
+            </div>
+        </div>
+        
+        <% if (paymentTotalDue != null && paymentTotalDue > 0) { %>
+        <div class="total-due">
+            Total Amount Due: ₹<%= String.format("%.2f", paymentTotalDue) %>
+        </div>
+        <% } %>
+        
+        <% if (paymentInvoices != null && !paymentInvoices.isEmpty()) { %>
+        <div style="margin: 20px 0;">
+            <h3 style="color: #dc3545; margin-bottom: 10px;">
+                Unpaid Invoices (<%= paymentInvoiceCount != null ? paymentInvoiceCount : paymentInvoices.size() %>)
+            </h3>
+            <div class="invoice-list">
+                <% for (InvoiceInfo invoice : paymentInvoices) { %>
+                <div class="invoice-item">
+                    <div class="invoice-header">
+                        <%= invoice.getInvoiceNumber() %>
+                        <% if (invoice.getShopName() != null) { %>
+                        - <%= invoice.getShopName().toUpperCase() %>
+                        <% } %>
+                    </div>
+                    <div class="invoice-detail">
+                        <strong>Date:</strong> <%= invoice.getInvoiceDate() != null ? invoice.getInvoiceDate() : "N/A" %>
+                    </div>
+                    <div class="invoice-detail">
+                        <strong>Total Amount:</strong> ₹<%= String.format("%.2f", invoice.getTotalAmount()) %>
+                    </div>
+                    <div class="invoice-detail">
+                        <strong>Amount Due:</strong> 
+                        <span style="color: #dc3545; font-weight: bold;">
+                            ₹<%= String.format("%.2f", invoice.getAmountDue()) %>
+                        </span>
+                    </div>
+                    <div class="invoice-detail">
+                        <strong>Payment State:</strong> <%= invoice.getPaymentState() != null ? invoice.getPaymentState() : "Not Paid" %>
+                    </div>
+                </div>
+                <% } %>
+            </div>
+        </div>
+        <% } %>
+        
+        <div class="warning-message">
+            <strong>⛔ Sample Collection Blocked</strong><br/>
+            Sample collection cannot proceed until all pending OPD lab invoices are settled.<br/>
             Please complete payment at the billing counter.
-        </p>
+        </div>
         
         <div class="warning-actions">
             <button type="button" class="btn-primary" onclick="window.location.href='<%= basePath %>billing'">
-                Go to Billing
-            </button>
-            <button type="button" class="btn-secondary" onclick="window.history.back()">
-                Go Back
+                🏦 Go to Billing
             </button>
             <button type="button" class="btn-info" onclick="window.location.reload()">
-                Refresh
+                🔄 Refresh Status
+            </button>
+            <button type="button" class="btn-secondary" onclick="window.history.back()">
+                ← Go Back
             </button>
         </div>
     </div>
@@ -174,11 +356,15 @@
 
 <script type="text/javascript">
 (function() {
-    // Disable all form elements
+    console.log("Payment blocked - Disabling form elements");
+    
+    // Disable all form elements except modal buttons
     var elements = document.querySelectorAll('input, select, textarea, button');
     for (var i = 0; i < elements.length; i++) {
         if (!elements[i].closest('.warning-actions')) {
             elements[i].disabled = true;
+            elements[i].style.opacity = '0.5';
+            elements[i].style.cursor = 'not-allowed';
         }
     }
     
@@ -187,16 +373,30 @@
     for (var i = 0; i < forms.length; i++) {
         forms[i].onsubmit = function(e) {
             e.preventDefault();
-            alert('Payment verification required.');
+            alert('❌ Payment verification required. Please clear pending dues at billing counter.');
             return false;
         };
     }
     
     // Override save function
     window.savePage = function() {
-        alert('Payment verification required before saving.');
+        alert('❌ Payment verification required before saving. Please clear pending dues.');
         return false;
     };
+    
+    // Prevent any clicks outside modal
+    document.querySelector('.payment-warning-overlay').addEventListener('click', function(e) {
+        if (e.target === this) {
+            alert('⚠️ Please complete payment verification before proceeding.');
+        }
+    });
+    
+    // Log payment block reason
+    console.log("Payment Status: <%= paymentStatus %>");
+    console.log("Payment Message: <%= paymentMessage %>");
+    <% if (paymentTotalDue != null) { %>
+    console.log("Total Due: <%= paymentTotalDue %>");
+    <% } %>
 })();
 </script>
 <% } %>
