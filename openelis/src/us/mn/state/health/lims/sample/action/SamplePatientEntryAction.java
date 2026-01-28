@@ -202,28 +202,18 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             return patientUuid;
         }
         
-        // 3. Try to get from PatientManagmentInfo in form
+        // 3. Try to get from form using patientPK field
         try {
-            PatientManagmentInfo patientInfo = (PatientManagmentInfo) PropertyUtils.getProperty(dynaForm, "patientProperties");
-            if (patientInfo != null) {
-                // Try to get UUID from patient info
-                String uuid = patientInfo.getPatientUUID();
-                if (uuid != null && !uuid.isEmpty()) {
-                    System.out.println("Patient UUID from PatientManagmentInfo: " + uuid);
-                    return uuid;
-                }
-                
-                // Try to get patient ID and lookup UUID
-                String patientId = patientInfo.getPatientID();
-                if (patientId != null && !patientId.isEmpty()) {
-                    patientUuid = getPatientUuidFromPatientId(patientId);
-                    if (patientUuid != null) {
-                        return patientUuid;
-                    }
+            String patientPK = (String) PropertyUtils.getProperty(dynaForm, "patientPK");
+            if (patientPK != null && !patientPK.isEmpty()) {
+                System.out.println("Patient PK from form: " + patientPK);
+                patientUuid = getPatientUuidFromPatientId(patientPK);
+                if (patientUuid != null) {
+                    return patientUuid;
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error getting patient UUID from PatientManagmentInfo: " + e.getMessage());
+            System.err.println("Error getting patient UUID from patientPK: " + e.getMessage());
         }
         
         // 4. Try to get from sample UUID in form
