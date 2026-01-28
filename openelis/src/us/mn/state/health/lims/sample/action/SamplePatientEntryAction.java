@@ -142,9 +142,50 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
     }
     
     /**
-     * Get patient UUID from patient ID in form
+     * Get patient UUID directly from patient table using person_id
      */
-    private String getPatientUuidFromPatientId(String patientId) {
+    private String getPatientUuidFromPersonId(String personId) {
+        if (personId == null || personId.isEmpty()) {
+            return null;
+        }
+        
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = HibernateUtil.getSession().connection();
+            
+            String sql = "SELECT uuid FROM clinlims.patient WHERE person_id = ?";
+            
+            ps = conn.prepareStatement(sql);
+            ps.setInt(1, Integer.parseInt(personId));
+            rs = ps.executeQuery();
+            
+            if (rs.next()) {
+                String patientUuid = rs.getString("uuid");
+                System.out.println("Found patient UUID from person ID: " + patientUuid);
+                return patientUuid;
+            }
+        } catch (Exception e) {
+            System.err.println("Error querying patient UUID by person ID: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (ps != null) ps.close();
+            } catch (Exception e) {
+                System.err.println("Error closing resources: " + e.getMessage());
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get patient UUID from patient table by ID with retry logic
+     */
+    private String getPatientUuidFromPatientIdWithRetry(String patientId) {
         if (patientId == null || patientId.isEmpty()) {
             return null;
         }
@@ -156,16 +197,30 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         try {
             conn = HibernateUtil.getSession().connection();
             
+            // Try direct lookup first
             String sql = "SELECT uuid FROM clinlims.patient WHERE id = ?";
             
             ps = conn.prepareStatement(sql);
-            ps.setInt(1, Integer.parseInt(patientId));
+            
+            try {
+                ps.setInt(1, Integer.parseInt(patientId));
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid patient ID format: " + patientId);
+                return null;
+            }
+            
             rs = ps.executeQuery();
             
             if (rs.next()) {
                 String patientUuid = rs.getString("uuid");
-                System.out.println("Found patient UUID from patient ID: " + patientUuid);
-                return patientUuid;
+                if (patientUuid != null && !patientUuid.trim().isEmpty()) {
+                    System.out.println("Found patient UUID from patient ID: " + patientUuid);
+                    return patientUuid;
+                } else {
+                    System.out.println("Patient UUID is null or empty for patient ID: " + patientId);
+                }
+            } else {
+                System.out.println("No patient found with ID: " + patientId);
             }
         } catch (Exception e) {
             System.err.println("Error querying patient UUID by patient ID: " + e.getMessage());
@@ -184,39 +239,106 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
     
     /**
      * Extract patient UUID from various possible sources in the request
+     * Enhanced with multiple fallback options
      */
     private String extractPatientUuid(HttpServletRequest request, BaseActionForm dynaForm) {
         String patientUuid = null;
         
+        System.out.println("=== Starting Patient UUID Extraction ===");
+        
         // 1. Try request parameter (direct from URL)
         patientUuid = request.getParameter("patientUuid");
         if (patientUuid != null && !patientUuid.isEmpty()) {
-            System.out.println("Patient UUID from parameter: " + patientUuid);
+            System.out.println("✓ Patient UUID from request parameter: " + patientUuid);
             return patientUuid;
         }
         
-        // 2. Try session
+        // 2. Try session attribute
         patientUuid = (String) request.getSession().getAttribute("currentPatientUuid");
         if (patientUuid != null && !patientUuid.isEmpty()) {
-            System.out.println("Patient UUID from session: " + patientUuid);
+            System.out.println("✓ Patient UUID from session: " + patientUuid);
             return patientUuid;
         }
         
-        // 3. Try to get from form using patientPK field
+        // 3. Try from form using various patient-related fields
         try {
-            String patientPK = (String) PropertyUtils.getProperty(dynaForm, "patientPK");
-            if (patientPK != null && !patientPK.isEmpty()) {
-                System.out.println("Patient PK from form: " + patientPK);
-                patientUuid = getPatientUuidFromPatientId(patientPK);
-                if (patientUuid != null) {
-                    return patientUuid;
+            // Try patientPK field
+            Object patientPKObj = PropertyUtils.getProperty(dynaForm, "patientPK");
+            if (patientPKObj != null) {
+                String patientPK = patientPKObj.toString();
+                if (!patientPK.isEmpty()) {
+                    System.out.println("Found patientPK from form: " + patientPK);
+                    patientUuid = getPatientUuidFromPatientIdWithRetry(patientPK);
+                    if (patientUuid != null) {
+                        System.out.println("✓ Patient UUID from patientPK: " + patientUuid);
+                        return patientUuid;
+                    }
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error getting patient UUID from patientPK: " + e.getMessage());
+            System.out.println("Could not get patientPK from form: " + e.getMessage());
         }
         
-        // 4. Try to get from sample UUID in form
+        // 4. Try various other form field names
+        String[] possiblePatientFields = {
+            "patientId", 
+            "patient_id", 
+            "patientID",
+            "patient.id",
+            "patientProperties.patientPK"
+        };
+        
+        for (String fieldName : possiblePatientFields) {
+            try {
+                Object fieldValue = PropertyUtils.getProperty(dynaForm, fieldName);
+                if (fieldValue != null) {
+                    String fieldStr = fieldValue.toString();
+                    if (!fieldStr.isEmpty()) {
+                        System.out.println("Found patient field '" + fieldName + "': " + fieldStr);
+                        patientUuid = getPatientUuidFromPatientIdWithRetry(fieldStr);
+                        if (patientUuid != null) {
+                            System.out.println("✓ Patient UUID from " + fieldName + ": " + patientUuid);
+                            return patientUuid;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Field doesn't exist, try next one
+            }
+        }
+        
+        // 5. Try from session attributes (various possible names)
+        String[] sessionAttributes = {
+            "patientId",
+            "patientPK",
+            "patient_id",
+            "personId",
+            "person_id"
+        };
+        
+        for (String attrName : sessionAttributes) {
+            Object attrValue = request.getSession().getAttribute(attrName);
+            if (attrValue != null) {
+                String attrStr = attrValue.toString();
+                if (!attrStr.isEmpty()) {
+                    System.out.println("Found session attribute '" + attrName + "': " + attrStr);
+                    
+                    // If it's personId, use different lookup
+                    if (attrName.toLowerCase().contains("person")) {
+                        patientUuid = getPatientUuidFromPersonId(attrStr);
+                    } else {
+                        patientUuid = getPatientUuidFromPatientIdWithRetry(attrStr);
+                    }
+                    
+                    if (patientUuid != null) {
+                        System.out.println("✓ Patient UUID from session " + attrName + ": " + patientUuid);
+                        return patientUuid;
+                    }
+                }
+            }
+        }
+        
+        // 6. Try to get from sample UUID in form
         try {
             String sampleUuid = (String) PropertyUtils.getProperty(dynaForm, "uuid");
             System.out.println("Sample UUID from form: " + sampleUuid);
@@ -224,6 +346,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             if (sampleUuid != null && !sampleUuid.isEmpty()) {
                 patientUuid = getPatientUuidFromSampleUuid(sampleUuid);
                 if (patientUuid != null && !patientUuid.isEmpty()) {
+                    System.out.println("✓ Patient UUID from sample UUID: " + patientUuid);
                     return patientUuid;
                 }
             }
@@ -231,7 +354,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             System.err.println("Error getting patient UUID from sample UUID: " + e.getMessage());
         }
         
-        // 5. Try to get from accession number
+        // 7. Try to get from accession number
         try {
             String accessionNumber = (String) PropertyUtils.getProperty(dynaForm, "labNo");
             System.out.println("Accession number from form: " + accessionNumber);
@@ -239,6 +362,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             if (accessionNumber != null && !accessionNumber.isEmpty()) {
                 patientUuid = getPatientUuidFromAccessionNumber(accessionNumber);
                 if (patientUuid != null && !patientUuid.isEmpty()) {
+                    System.out.println("✓ Patient UUID from accession number: " + patientUuid);
                     return patientUuid;
                 }
             }
@@ -246,14 +370,34 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             System.err.println("Error getting patient UUID from accession number: " + e.getMessage());
         }
         
-        // 6. Try request attribute (might be set by previous action)
+        // 8. Try request attribute (might be set by previous action)
         patientUuid = (String) request.getAttribute("patientUuid");
         if (patientUuid != null && !patientUuid.isEmpty()) {
-            System.out.println("Patient UUID from request attribute: " + patientUuid);
+            System.out.println("✓ Patient UUID from request attribute: " + patientUuid);
             return patientUuid;
         }
         
-        System.out.println("Could not extract patient UUID from any source");
+        // 9. Last resort - check if there's a patient in context
+        Object patientInContext = request.getAttribute("patient");
+        if (patientInContext != null) {
+            System.out.println("Found patient object in request attributes");
+            // Try to get UUID from patient object via reflection
+            try {
+                Object uuidObj = PropertyUtils.getProperty(patientInContext, "uuid");
+                if (uuidObj != null) {
+                    patientUuid = uuidObj.toString();
+                    if (!patientUuid.isEmpty()) {
+                        System.out.println("✓ Patient UUID from patient object: " + patientUuid);
+                        return patientUuid;
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println("Could not extract UUID from patient object: " + e.getMessage());
+            }
+        }
+        
+        System.out.println("✗ Could not extract patient UUID from any source");
+        System.out.println("=== End Patient UUID Extraction ===");
         return null;
     }
 
@@ -288,6 +432,10 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
 
         // ====== PAYMENT VALIDATION LOGIC ======
         System.out.println("===== PAYMENT VALIDATION CHECK =====");
+        
+        // DEBUGGING: Enable this temporarily to see all available form fields
+        // Uncomment the next line to debug what fields are available
+        // us.mn.state.health.lims.common.util.FormDebugger.dumpAll(request, dynaForm);
         
         // Check if payment validation is enabled
         boolean paymentValidationEnabled = paymentValidationService.isEnabled();
