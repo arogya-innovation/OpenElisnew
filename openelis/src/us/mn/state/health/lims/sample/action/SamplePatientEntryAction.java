@@ -239,7 +239,7 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
             rs = ps.executeQuery();
             
             if (rs.next()) {
-                String patientUuid = rs.getString("uuid");
+                String patientUuid = rs.getString("patientId");
                 System.out.println("Found patient UUID from person identifier: " + patientUuid);
                 return patientUuid;
             }
@@ -323,14 +323,14 @@ public class SamplePatientEntryAction extends BaseSampleEntryAction {
         System.out.println("=== Starting Patient UUID Extraction ===");
         
         // 1. Try request parameter (direct from URL)
-        patientUuid = request.getParameter("patientUuid");
+        patientUuid = request.getParameter("patientId");
         if (patientUuid != null && !patientUuid.isEmpty()) {
             System.out.println("✓ Patient UUID from request parameter: " + patientUuid);
             return patientUuid;
         }
         
         // 2. Try session attribute
-        patientUuid = (String) request.getSession().getAttribute("currentPatientUuid");
+        patientUuid = (String) request.getSession().getAttribute("patientId");
         if (patientUuid != null && !patientUuid.isEmpty()) {
             System.out.println("✓ Patient UUID from session: " + patientUuid);
             return patientUuid;

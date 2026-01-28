@@ -153,10 +153,10 @@ public class PaymentValidationService {
     
     /**
      * Validates payment status for a patient
-     * @param patientUuid The UUID of the patient from Bahmni
+     * @param patient_ref The UUID of the patient from Bahmni
      * @return PaymentStatus object with validation result
      */
-    public PaymentStatus validatePayment(String patientUuid) {
+    public PaymentStatus validatePayment(String patient_ref) {
         HttpURLConnection connection = null;
         DataOutputStream outputStream = null;
         BufferedReader reader = null;
@@ -177,7 +177,7 @@ public class PaymentValidationService {
             
             // Prepare JSON-RPC 2.0 request body
             JSONObject params = new JSONObject();
-            params.put("patient_uuid", patientUuid);  // Changed from order_uuid to patient_uuid
+            params.put("patient_ref", patient_ref);  // Changed from order_uuid to patient_uuid
             
             JSONObject requestBody = new JSONObject();
             requestBody.put("jsonrpc", "2.0");
