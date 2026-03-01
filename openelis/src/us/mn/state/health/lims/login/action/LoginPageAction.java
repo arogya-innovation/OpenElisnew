@@ -35,6 +35,11 @@ public class LoginPageAction extends LoginBaseAction {
 			throws Exception {
         if (alreadyLoggedIn(request)) return mapping.findForward("dashboard");
 
+		boolean localLoginRequested = "true".equalsIgnoreCase(request.getParameter("localLogin"));
+		if (SystemConfiguration.getInstance().isKeycloakSSOEnabled() && !localLoginRequested) {
+			return mapping.findForward("ssoLogin");
+		}
+
 		String forward = FWD_SUCCESS;
 
 		if ("true".equals(ConfigurationProperties.getInstance().getPropertyValue(Property.allowLanguageChange))) {

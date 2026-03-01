@@ -4885,9 +4885,18 @@
         </action>
         <action path="/LoginPage" name="loginForm" type="us.mn.state.health.lims.login.action.LoginPageAction" validate="false">
             <forward name="dashboard" path="/LabDashboard.do"/>
+            <forward name="ssoLogin" path="/KeycloakLogin.do"/>
             <forward name="success" path="loginPageDefinition"/>
             <forward name="fail" path="loginPageDefinition"/>
         </action>
+       <action path="/KeycloakLogin" name="loginForm" type="us.mn.state.health.lims.login.action.KeycloakLoginAction" validate="false">
+          <forward name="dashboard" path="/LabDashboard.do"/>
+          <forward name="fail" path="/LoginPage.do?localLogin=true"/>
+       </action>
+       <action path="/KeycloakCallback" name="loginForm" type="us.mn.state.health.lims.login.action.KeycloakCallbackAction" validate="false">
+          <forward name="success" path="/LabDashboard.do"/>
+          <forward name="fail" path="/LoginPage.do?localLogin=true"/>
+       </action>
        <action path="/ValidateLogin" name="loginValidateForm" type="us.mn.state.health.lims.login.action.LoginValidateAction" validate="false">
           <forward name="success" path="/LabDashboard.do"/>
           <forward name="fail" path="/LoginPage.do"/> 

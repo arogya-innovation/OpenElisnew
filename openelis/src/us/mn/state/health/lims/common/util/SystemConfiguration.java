@@ -978,6 +978,106 @@ public class SystemConfiguration {
 		return properties.getProperty("permissions.agent", "USER").trim().toUpperCase();
 	}
 
+	public boolean isKeycloakSSOEnabled() {
+		return "Y".equalsIgnoreCase(properties.getProperty("keycloak.sso.enabled", "N").trim());
+	}
+
+	public String getKeycloakAuthServerUrl() {
+		String value = properties.getProperty("keycloak.auth.server.url", "").trim();
+		if (value.endsWith("/")) {
+			value = value.substring(0, value.length() - 1);
+		}
+		return value;
+	}
+
+	public String getKeycloakRealm() {
+		return properties.getProperty("keycloak.realm", "").trim();
+	}
+
+	public String getKeycloakClientId() {
+		return properties.getProperty("keycloak.client.id", "").trim();
+	}
+
+	public String getKeycloakClientSecret() {
+		return properties.getProperty("keycloak.client.secret", "").trim();
+	}
+
+	public String getKeycloakRedirectUri() {
+		return properties.getProperty("keycloak.redirect.uri", "").trim();
+	}
+
+	public String getKeycloakScopes() {
+		return properties.getProperty("keycloak.scopes", "openid profile email").trim();
+	}
+
+	public String getKeycloakAuthorizationEndpoint() {
+		String endpoint = properties.getProperty("keycloak.authorization.endpoint", "").trim();
+		if (!GenericValidator.isBlankOrNull(endpoint)) {
+			return endpoint;
+		}
+
+		String authServer = getKeycloakAuthServerUrl();
+		String realm = getKeycloakRealm();
+
+		if (GenericValidator.isBlankOrNull(authServer) || GenericValidator.isBlankOrNull(realm)) {
+			return "";
+		}
+
+		return authServer + "/realms/" + realm + "/protocol/openid-connect/auth";
+	}
+
+	public String getKeycloakTokenEndpoint() {
+		String endpoint = properties.getProperty("keycloak.token.endpoint", "").trim();
+		if (!GenericValidator.isBlankOrNull(endpoint)) {
+			return endpoint;
+		}
+
+		String authServer = getKeycloakAuthServerUrl();
+		String realm = getKeycloakRealm();
+
+		if (GenericValidator.isBlankOrNull(authServer) || GenericValidator.isBlankOrNull(realm)) {
+			return "";
+		}
+
+		return authServer + "/realms/" + realm + "/protocol/openid-connect/token";
+	}
+
+	public String getKeycloakUserInfoEndpoint() {
+		String endpoint = properties.getProperty("keycloak.userinfo.endpoint", "").trim();
+		if (!GenericValidator.isBlankOrNull(endpoint)) {
+			return endpoint;
+		}
+
+		String authServer = getKeycloakAuthServerUrl();
+		String realm = getKeycloakRealm();
+
+		if (GenericValidator.isBlankOrNull(authServer) || GenericValidator.isBlankOrNull(realm)) {
+			return "";
+		}
+
+		return authServer + "/realms/" + realm + "/protocol/openid-connect/userinfo";
+	}
+
+	public String getKeycloakLogoutEndpoint() {
+		String endpoint = properties.getProperty("keycloak.logout.endpoint", "").trim();
+		if (!GenericValidator.isBlankOrNull(endpoint)) {
+			return endpoint;
+		}
+
+		String authServer = getKeycloakAuthServerUrl();
+		String realm = getKeycloakRealm();
+
+		if (GenericValidator.isBlankOrNull(authServer) || GenericValidator.isBlankOrNull(realm)) {
+			return "";
+		}
+
+		return authServer + "/realms/" + realm + "/protocol/openid-connect/logout";
+	}
+
+	public String getKeycloakPostLogoutRedirectUri() {
+		return properties.getProperty("keycloak.post.logout.redirect.uri", "").trim();
+	}
+
 	public long getSearchTimeLimit() {
 		long limit = 20000L;
 		String timeLimit = properties.getProperty("patient.search.time.limit.ms");

@@ -235,6 +235,8 @@ public interface IActionConstants {
 
 	//user info
 	public static final String USER_SESSION_DATA         = "userSessionData";
+	public static final String KEYCLOAK_OAUTH_STATE      = "keycloakOAuthState";
+	public static final String KEYCLOAK_ID_TOKEN         = "keycloakIdToken";
 	public static final String LOGIN_PAGE				 = "loginPage";
 	public static final String HOME_PAGE				 = "homePage";
 	public static final String MAIN_PAGE                 = "Main";
