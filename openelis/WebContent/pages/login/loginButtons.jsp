@@ -1,6 +1,7 @@
 <%@ page language="java"
 	contentType="text/html; charset=utf-8"
-	import="us.mn.state.health.lims.common.action.IActionConstants"
+	import="us.mn.state.health.lims.common.action.IActionConstants,
+	us.mn.state.health.lims.common.util.SystemConfiguration"
 %>
 
 <%@ taglib uri="/tags/struts-bean" prefix="bean" %>
@@ -21,6 +22,9 @@
         <html:button property="changePassword" styleId="changePasswordButton" onclick="setAction(window.document.forms[0], 'ChangePassword', 'no', '');" >
   		    <bean:message key="label.button.changePassword"/>
   		</html:button>
+        <% if (SystemConfiguration.getInstance().isKeycloakSSOEnabled()) { %>
+        <input type="button" id="ssoLoginButton" value="Login with SSO" onclick="window.location='<%= request.getContextPath() %>/KeycloakLogin.do';" />
+        <% } %>
     </td>
 </tr>
 </table>
