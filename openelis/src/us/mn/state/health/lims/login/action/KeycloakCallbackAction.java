@@ -34,6 +34,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URLEncoder;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public class KeycloakCallbackAction extends LoginBaseAction {
@@ -172,16 +173,46 @@ public class KeycloakCallbackAction extends LoginBaseAction {
             return "";
         }
 
-        String loginName = userInfo.optString("preferred_username", "");
-        if (GenericValidator.isBlankOrNull(loginName)) {
-            loginName = userInfo.optString("email", "");
+        LinkedHashSet<String> claimOrder = buildLoginClaimOrder();
+        for (String claimName : claimOrder) {
+            String loginName = userInfo.optString(claimName, "");
+            if (!GenericValidator.isBlankOrNull(loginName)) {
+                return loginName.trim();
+            }
         }
 
-        if (GenericValidator.isBlankOrNull(loginName)) {
-            loginName = userInfo.optString("sub", "");
+		LogEvent.logError("KeycloakCallbackAction", "resolveLoginName",
+				"Unable to resolve login name from claims " + claimOrder.toString() + " in userinfo response");
+
+		return "";
+	}
+
+    private LinkedHashSet<String> buildLoginClaimOrder() {
+        LinkedHashSet<String> claimOrder = new LinkedHashSet<String>();
+
+        String primaryClaim = SystemConfiguration.getInstance().getKeycloakLoginPrimaryClaim();
+        if (!GenericValidator.isBlankOrNull(primaryClaim)) {
+            claimOrder.add(primaryClaim.trim());
         }
 
-        return GenericValidator.isBlankOrNull(loginName) ? "" : loginName.trim();
+        String fallbackClaims = SystemConfiguration.getInstance().getKeycloakLoginFallbackClaims();
+        if (!GenericValidator.isBlankOrNull(fallbackClaims)) {
+            String[] splitClaims = fallbackClaims.split(",");
+            for (String splitClaim : splitClaims) {
+                String claim = splitClaim == null ? "" : splitClaim.trim();
+                if (!GenericValidator.isBlankOrNull(claim)) {
+                    claimOrder.add(claim);
+                }
+            }
+        }
+
+        if (claimOrder.isEmpty()) {
+            claimOrder.add("preferred_username");
+            claimOrder.add("email");
+            claimOrder.add("sub");
+        }
+
+        return claimOrder;
     }
 
     private JSONObject fetchUserInfo(String accessToken) {

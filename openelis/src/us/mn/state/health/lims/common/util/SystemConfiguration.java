@@ -1010,6 +1010,14 @@ public class SystemConfiguration {
 		return properties.getProperty("keycloak.scopes", "openid profile email").trim();
 	}
 
+	public String getKeycloakLoginPrimaryClaim() {
+		return properties.getProperty("keycloak.login.primary.claim", "preferred_username").trim();
+	}
+
+	public String getKeycloakLoginFallbackClaims() {
+		return properties.getProperty("keycloak.login.fallback.claims", "email,sub").trim();
+	}
+
 	public String getKeycloakAuthorizationEndpoint() {
 		String endpoint = properties.getProperty("keycloak.authorization.endpoint", "").trim();
 		if (!GenericValidator.isBlankOrNull(endpoint)) {
